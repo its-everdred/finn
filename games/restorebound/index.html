@@ -30,7 +30,10 @@
   .btns { display: flex; gap: 16px; align-items: flex-end; }
   .btns button { width: min(20vw, 96px); aspect-ratio: 1; border-radius: 50%; background: #14142a; border: 2px solid rgba(242,208,92,.8); color: #f2d05c; font-size: 20px; padding: 0; }
   .btns .b { width: min(15vw, 72px); margin-bottom: 10px; border-color: rgba(143,211,255,.8); color: #8fd3ff; }
-  .pad button:active, .btns button:active { background: #f2d05c; color: #0b0b14; }
+  /* the pad is a joystick: the .pad element takes every touch; its buttons are only the graphic */
+  .pad { touch-action: none; position: relative; }
+  .pad button { pointer-events: none; }
+  .pad button.on, .btns button:active { background: #f2d05c; color: #0b0b14; }
   .bar { display: flex; gap: 10px; align-items: center; font-size: 12px; opacity: .8; padding: 0 12px 8px; text-align: center; flex-wrap: wrap; justify-content: center; }
   a { color: #8fd3ff; }
   .bar button { font: inherit; font-size: 12px; background: #14142a; color: #f2d05c; border: 1px solid #f2d05c; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
@@ -89,7 +92,7 @@
       canvas.dispatchEvent(ev); document.dispatchEvent(ev);
     }
     function tap(key) { fire("keydown", key); setTimeout(() => fire("keyup", key), 40); }
-    document.querySelectorAll("#touch button").forEach((b) => {
+    document.querySelectorAll("#touch .btns button").forEach((b) => {
       const key = b.dataset.key; let down = false;
       const press = (e) => { e.preventDefault(); window.music.unlock(); if (!down) { down = true; fire("keydown", key); } };
       const release = (e) => { e.preventDefault(); if (down) { down = false; fire("keyup", key); } };
@@ -98,6 +101,49 @@
       b.addEventListener("touchcancel", release, { passive: false });
       b.addEventListener("mousedown", press); b.addEventListener("mouseup", release); b.addEventListener("mouseleave", release);
     });
+    // The d-pad is an 8-way virtual joystick. Any touch on the pad is measured from the pad's centre;
+    // past a small deadzone its angle picks one of 8 directions, and the matching arrow key(s) are
+    // held down. Diagonals hold two arrows at once (the game already combines them).
+    (function joystick() {
+      const pad = document.querySelector("#touch .pad");
+      if (!pad) return;
+      const DIRS = [["ArrowRight"], ["ArrowRight", "ArrowDown"], ["ArrowDown"], ["ArrowLeft", "ArrowDown"],
+                    ["ArrowLeft"], ["ArrowLeft", "ArrowUp"], ["ArrowUp"], ["ArrowRight", "ArrowUp"]];
+      const GLYPH = { ArrowUp: ".u", ArrowLeft: ".l", ArrowRight: ".r", ArrowDown: ".d" };
+      let held = new Set(), touchId = null, mouse = false;
+      function setHeld(next) {
+        for (const k of held) if (!next.has(k)) { fire("keyup", k); pad.querySelector(GLYPH[k]).classList.remove("on"); }
+        for (const k of next) if (!held.has(k)) { fire("keydown", k); pad.querySelector(GLYPH[k]).classList.add("on"); }
+        held = next;
+      }
+      function aim(clientX, clientY) {
+        const r = pad.getBoundingClientRect();
+        const dx = clientX - (r.left + r.width / 2), dy = clientY - (r.top + r.height / 2);
+        const dead = Math.min(r.width, r.height) * 0.12;
+        if (Math.hypot(dx, dy) < dead) { setHeld(new Set()); return; }
+        const sector = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
+        setHeld(new Set(DIRS[sector]));
+      }
+      const release = () => { touchId = null; mouse = false; setHeld(new Set()); };
+      function findTouch(list) { for (const t of list) if (t.identifier === touchId) return t; return null; }
+      pad.addEventListener("touchstart", (e) => {
+        e.preventDefault(); window.music.unlock();
+        if (touchId === null) touchId = e.changedTouches[0].identifier;
+        const t = findTouch(e.touches); if (t) aim(t.clientX, t.clientY);
+      }, { passive: false });
+      pad.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        const t = findTouch(e.changedTouches); if (t) aim(t.clientX, t.clientY);
+      }, { passive: false });
+      const end = (e) => { e.preventDefault(); if (findTouch(e.changedTouches)) release(); };
+      pad.addEventListener("touchend", end, { passive: false });
+      pad.addEventListener("touchcancel", end, { passive: false });
+      // mouse, for desktop testing
+      pad.addEventListener("mousedown", (e) => { e.preventDefault(); mouse = true; aim(e.clientX, e.clientY); });
+      window.addEventListener("mousemove", (e) => { if (mouse) aim(e.clientX, e.clientY); });
+      window.addEventListener("mouseup", () => { if (mouse) release(); });
+      window.addEventListener("blur", release);
+    })();
     // Name entry: the game flags data-naming on <body>; the text field mirrors its value into the game
     // by replaying the difference as key presses, and OK / Enter submits.
     const box = document.getElementById("namebox");
