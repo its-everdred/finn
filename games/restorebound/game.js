@@ -20,7 +20,7 @@ Object.entries(window.SPRITES).forEach(([k, rows]) => loadSprite(k, window.pixel
 
 const START = {
   hasSword: false, kidnapped: false, boomed: false, hasKey: false, talkedSis: false, talkedBro: false, talkedMom: false, talkedDad: false,
-  cave: 0, beatBugon: false, branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
+  cave: 0, beatBugon: false, party: [], branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
 };
 const state = { name: "Finn", sis: "Lily", bro: "Max", dog: "Biscuit", maxHp: 40, maxPp: 30, ...START };
 
@@ -142,6 +142,24 @@ function wireMenu() {
 
 // ---------------------------------------------------------------- overworld helpers
 
+// Party members trail the hero along the path he actually walked: the player's recent
+// positions are kept in a ring, and follower i sits a fixed number of frames behind.
+function makeFollowers(player) {
+  const names = state.party || [];
+  if (!names.length) return [];
+  const GAP = 14, trail = [];
+  const fol = names.map((nm, i) => add([sprite(nm), pos(player.pos.x, player.pos.y + 6), anchor("topleft"), z(9.5 - i * 0.01), "follower"]));
+  let last = player.pos.clone();
+  player.onUpdate(() => {
+    if (player.pos.dist(last) > 0.4) { trail.unshift(player.pos.clone()); last = player.pos.clone(); if (trail.length > GAP * names.length + 2) trail.pop(); }
+    fol.forEach((f, i) => {
+      const t = trail[Math.min(trail.length - 1, GAP * (i + 1))];
+      if (t) { const target = t.add(3, 6); f.pos = f.pos.lerp(target, Math.min(1, 12 * dt())); }
+      f.z = 9.5 + f.pos.y / 1000;
+    });
+  });
+  return fol;
+}
 function heroSprite() { return state.giantSword ? "hero_giant" : state.hasSword ? "hero_sword" : "hero"; }
 function makePlayer(x, y) {
   const p = add([
@@ -730,6 +748,7 @@ scene("cave", (opts = {}) => {
     }
   }
   const player = makePlayer(sx, sy);
+  makeFollowers(player);
   player.onUpdate(() => { camPos(W / 2, Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16))); });
   wireMenu();
 
