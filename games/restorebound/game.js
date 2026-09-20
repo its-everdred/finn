@@ -14,6 +14,13 @@ kaboom({
   crisp: true, pixelDensity: 1,
 });
 
+// The Hollow's art is drawn in sprites.js against this contract. Until a key lands there, a
+// magenta/ink checker stands in for it so the game still runs; the real art swaps in on load.
+const SPRITE_CONTRACT = ["orb", "malva", "swooper1", "swooper2", "swooper3", "stomper1", "stomper2", "stomper3", "hollowgate"];
+const PLACEHOLDER = Array.from({ length: 24 }, (_, y) => Array.from({ length: 24 }, (_, x) => (((x >> 2) + (y >> 2)) % 2 ? "m" : "j")).join(""));
+SPRITE_CONTRACT.forEach((k) => {
+  if (!window.SPRITES[k]) { console.warn(`sprites: "${k}" is not drawn yet; using a placeholder`); window.SPRITES[k] = PLACEHOLDER; }
+});
 Object.entries(window.SPRITES).forEach(([k, rows]) => loadSprite(k, window.pixels(rows)));
 
 // ---------------------------------------------------------------- game state
@@ -21,6 +28,7 @@ Object.entries(window.SPRITES).forEach(([k, rows]) => loadSprite(k, window.pixel
 const START = {
   hasSword: false, kidnapped: false, boomed: false, hasKey: false, talkedSis: false, talkedBro: false, talkedMom: false, talkedDad: false,
   cave: 0, beatBugon: false, party: [], branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
+  beatLygon: false, hollow: 0, beatMalva: false,
 };
 const state = { name: "Finn", sis: "Lily", bro: "Max", dog: "Biscuit", maxHp: 40, maxPp: 30, ...START };
 
@@ -34,13 +42,17 @@ function loadSave() {
 }
 // Old saves keep working across updates: fill in any field a newer build added,
 // keep the player's names and progress, and fall back to a scene that still exists.
-const SCENES = ["upstairs", "downstairs", "town", "cave"];
+const SCENES = ["upstairs", "downstairs", "town", "cave", "town2", "hollow"];
 function migrate(saved) {
   const st = { ...START, name: state.name, sis: state.sis, bro: state.bro, dog: state.dog, maxHp: state.maxHp, maxPp: state.maxPp, ...(saved.state || {}) };
   // a save from a build with different progress rules never traps the player: clamp what could
   st.hp = Math.min(Math.max(1, st.hp | 0), st.maxHp); st.pp = Math.min(Math.max(0, st.pp | 0), st.maxPp);
   st.cave = Math.min(Math.max(0, st.cave | 0), CAVE_ENEMIES.length);
+  st.hollow = Math.min(Math.max(0, st.hollow | 0), HOLLOW_ORDER.length);
+  st.beatLygon = !!st.beatLygon; st.beatMalva = !!st.beatMalva;
   let scene = saved.scene;
+  // the east town and the Hollow only exist once Lygon is beaten
+  if ((scene === "town2" || scene === "hollow") && !st.beatLygon) scene = "town";
   if (!SCENES.includes(scene)) scene = st.kidnapped ? "town" : "upstairs";
   return { scene, state: st };
 }
@@ -218,6 +230,9 @@ function resetCam() {
 // the cave is one tall map; the camera follows the player up it
 const CAVE_H = 1000;
 const CAVE_ENEMIES = ["chompo", "zagg", "skitter", "wibblo", "redstack", "boxor"];
+// the Hollow is one tall hall too; ground and air fights alternate, bottom to top
+const HOLLOW_H = 660;
+const HOLLOW_ORDER = ["clonk", "skreek", "thud", "flitz", "grumbo", "batty"];
 
 function hud() {
   const t = add([text("", { size: 8 }), pos(10, 6), color(232, 232, 240), z(50), fixed()]);
@@ -604,7 +619,8 @@ scene("downstairs", () => {
 
 // ---------------------------------------------------------------- scene: town
 
-scene("town", () => {
+scene("town", (opts) => {
+  opts = opts || {};
   resetCam();
   music.play("outside");
   save("town");
@@ -612,7 +628,14 @@ scene("town", () => {
   for (let i = 0; i < 120; i++) add([rect(1, 2), pos(rand(0, W), rand(0, H)), color(70, 140, 80)]);
   add([rect(40, H), pos(W / 2 - 20, 0), color(214, 190, 140)]);
   add([rect(W, 34), pos(0, H - 48), color(214, 190, 140)]);
-  wall(0, 0, 6, H); wall(W - 6, 0, 6, H); wall(0, H - 6, W, 6);
+  wall(0, 0, 6, H); wall(0, H - 6, W, 6);
+  // once Lygon is beaten the road runs on east, off the right edge, to the next town
+  if (state.beatLygon) {
+    wall(W - 6, 0, 6, H - 48); wall(W - 6, H - 14, 6, 14);
+    add([rect(6, 34), pos(W - 6, H - 48), color(214, 190, 140), z(1)]);
+    add([text(">", { size: 8 }), pos(W - 12, H - 34), anchor("center"), color(242, 208, 92), z(2)]);
+    add([rect(6, 34), pos(W - 6, H - 48), area(), "east"]);
+  } else wall(W - 6, 0, 6, H);
   // purple glow over the hill
   const glow = add([rect(W, 70), pos(0, 0), color(199, 123, 214), opacity(0.12), z(0)]);
   glow.onUpdate(() => { glow.opacity = 0.08 + 0.08 * Math.abs(Math.sin(time() * 2)); });
@@ -626,7 +649,8 @@ scene("town", () => {
     s.onUpdate(() => { s.pos.y -= 12 * dt(); s.opacity -= 0.25 * dt(); if (s.opacity <= 0) { s.pos = vec2(W / 2 + rand(-10, 10), 12); s.opacity = 0.6; } });
   }
 
-  const player = makePlayer(W / 2 - 11, H - 44);
+  const player = makePlayer(opts.from === "east" ? W - 34 : W / 2 - 11, H - 44);
+  player.onCollide("east", () => { if (!dialogOpen) go("town2", { from: "west" }); });
 
   // the cave mouth at the top of the hill, right behind the wreck
   add([sprite("cavemouth"), pos(W / 2 - 24, 0), anchor("topleft"), z(1)]);
@@ -644,7 +668,11 @@ scene("town", () => {
     } else go("cave");
   });
 
-  npc("elder", 90, H - 50, "elder", () => say(state.cave > 0 ? [
+  npc("elder", 90, H - 50, "elder", () => say(state.beatLygon ? [
+    "Old Man: You brought them home. Good lad.",
+    "Old Man: But the sky's still wrong. Follow the road east. Folks in the next town have gone strange.",
+    "Old Man: They say there's a hole in the hill over there. The HOLLOW. Don't go in it. ...You're going in it, aren't you.",
+  ] : state.cave > 0 ? [
     `Old Man: Still in one piece? You've beaten ${state.cave} of the clown's critters, by my count.`,
     "Old Man: The big-eared one guards the inner door. Then it's the clown himself.",
   ] : [
@@ -653,7 +681,11 @@ scene("town", () => {
     "Old Man: You've got a sword. That's more than I had at your age. Go on.",
   ]), { footY: 16 });
 
-  npc("kid", W - 110, H - 50, "kid", () => say(state.cave > 0 ? [
+  npc("kid", W - 110, H - 50, "kid", () => say(state.beatLygon ? [
+    "Kid: My cousin lives in the east town. He says the MAILMAN walked into the Hollow and came out... different.",
+    "Kid: Purple eyes. Flying. Mailmen don't fly, " + state.name + ".",
+    "Kid: The road east is open now. I'm still watching from here.",
+  ] : state.cave > 0 ? [
     "Kid: You went IN there?! And came back OUT?!",
     "Kid: Everyone says there's robots in that cave. And aliens. And a toad with too many teeth.",
   ] : [
@@ -662,7 +694,7 @@ scene("town", () => {
     "Kid: PSI Ice freezes stuff, by the way. My cousin told me. He knows things.",
   ]), { footY: 14 });
 
-  const dog = npc("dog", 200, 120, "dog", () => say([`* ${state.dog} followed you out. ${state.dog} is not supposed to be outside.`, `* ${state.dog} looks at the hill, then at you, very seriously.`, "* Woof."]), { footY: 6 });
+  const dog = npc("dog", 200, 120, "dog", () => say(state.beatLygon ? [`* ${state.dog} is staring east, down the road. Low growl.`, `* ${state.dog} does not like whatever is over there.`, "* Grrr."] : [`* ${state.dog} followed you out. ${state.dog} is not supposed to be outside.`, `* ${state.dog} looks at the hill, then at you, very seriously.`, "* Woof."]), { footY: 6 });
   let dogT = 0;
   dog.onUpdate(() => { dogT += dt(); dog.pos.x = 200 + Math.sin(dogT * 0.7) * 14; });
 
@@ -670,7 +702,9 @@ scene("town", () => {
   wireMenu();
   hud();
 
-  wait(0.3, () => say(state.cave > 0
+  wait(0.3, () => say(state.beatLygon
+    ? (opts.from === "east" ? ["* Home. The cave is quiet. The east is not."] : ["* The cave is quiet now. Down the road, to the EAST, the sky is still flickering purple."])
+    : state.cave > 0
     ? ["* The cave is still humming. Your family is still in there."]
     : ["* The air smells like popcorn and lightning.", "* Up the path, a cave is glowing purple."]));
 });
@@ -784,7 +818,7 @@ scene("cave", (opts = {}) => {
     player.onCollide("bugonzone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.bugon.meet, () => go("battle", "bugon")); });
   }
   // Lygon waits at the top of the tunnel once Bugon is gone; no door, just him
-  if (state.beatBugon) {
+  if (state.beatBugon && !state.beatLygon) {
     const top = segs[segs.length - 1];
     const spot = add([rect(70, 40), pos(top.x - 13, 6), color(199, 123, 214), opacity(0.15), z(0)]);
     spot.onUpdate(() => { spot.opacity = 0.1 + 0.12 * Math.abs(Math.sin(time() * 3)); });
@@ -803,6 +837,7 @@ scene("cave", (opts = {}) => {
   const fights = CAVE_ENEMIES.length - state.cave;
   wait(0.3, () => say(state.cave === 0
     ? ["* It's dark. It smells like wet rock and cotton candy.", "* Something is chittering up ahead."]
+    : state.beatLygon ? ["* Quiet. Nothing up there now but confetti and two empty cages."]
     : state.beatBugon ? ["* The way to the top is open. He's up there. So are they."]
     : [`* ${fights} of the clown's critters left between you and the big-eared one.`]));
 });
@@ -889,6 +924,257 @@ scene("sideroom", (opts = {}) => {
 });
 
 
+// ---------------------------------------------------------------- scene: town2 (east)
+// One screen east of home along the road. Drier, greyer, quieter: half the town has walked
+// up the hill into the HOLLOW and come back wrong. The gate to it sits at the top of the hill.
+
+scene("town2", (opts) => {
+  opts = opts || {};
+  resetCam();
+  music.play("outside");
+  save("town2");
+  add([rect(W, H), pos(0, 0), color(150, 138, 110)]);
+  for (let i = 0; i < 160; i++) add([rect(rand(2, 4), rand(1, 2)), pos(rand(0, W), rand(0, H)), color(124, 112, 90)]);
+  add([rect(W, 34), pos(0, H - 48), color(196, 176, 130)]);
+  add([rect(40, H - 48), pos(W / 2 - 20, 0), color(196, 176, 130)]);
+  wall(0, 0, W, 4); wall(0, H - 6, W, 6); wall(W - 6, 0, 6, H);
+  // west edge: back down the road to town
+  wall(0, 0, 6, H - 48); wall(0, H - 14, 6, 14);
+  add([rect(6, 34), pos(0, H - 48), area(), "west"]);
+  add([text("<", { size: 8 }), pos(12, H - 34), anchor("center"), color(242, 208, 92), z(2)]);
+  // purple glow spilling down from the hill
+  const glow = add([rect(W, 80), pos(0, 0), color(199, 123, 214), opacity(0.14), z(0)]);
+  glow.onUpdate(() => { glow.opacity = 0.1 + 0.1 * Math.abs(Math.sin(time() * 1.7)); });
+
+  // houses in other colours than home's, shutters closed
+  [[18, 56, [205, 165, 225]], [W - 66, 56, [165, 205, 225]], [24, 128, [235, 205, 155]]].forEach(([x, y, c]) => {
+    add([sprite("house"), pos(x, y), anchor("topleft"), color(...c), z(2)]); wall(x + 2, y + 8, 42, 8);
+  });
+  [[W - 40, 130], [W - 70, 168], [70, 172]].forEach(([x, y]) => { add([sprite("tree"), pos(x, y), anchor("topleft"), color(200, 180, 160), z(3)]); wall(x + 5, y + 12, 8, 4); });
+  // the well: stone ring, two posts, a little roof, water that catches the light
+  const wx = W - 92, wy = 124;
+  add([rect(3, 24), pos(wx + 2, wy - 22), color(110, 70, 44), z(2)]); add([rect(3, 24), pos(wx + 25, wy - 22), color(110, 70, 44), z(2)]);
+  add([rect(36, 6), pos(wx - 3, wy - 26), color(120, 60, 40), z(3)]); add([rect(30, 2), pos(wx, wy - 20), color(80, 40, 28), z(3)]);
+  add([rect(30, 20), pos(wx, wy), color(112, 106, 122), z(2)]); add([rect(22, 12), pos(wx + 4, wy + 4), color(40, 70, 130), z(3)]);
+  const rip = add([rect(8, 2), pos(wx + 8, wy + 8), color(140, 190, 240), z(4)]);
+  rip.onUpdate(() => { rip.pos.x = wx + 6 + (Math.sin(time() * 2) + 1) * 6; rip.opacity = 0.6 + 0.4 * Math.abs(Math.sin(time() * 3)); });
+  wall(wx, wy, 30, 20);
+
+  // the HOLLOW gate at the top of the hill
+  add([sprite("hollowgate"), pos(W / 2 - 24, 0), anchor("topleft"), z(1)]);
+  const gg = add([rect(44, 30), pos(W / 2 - 22, 8), color(199, 123, 214), opacity(0.25), z(2)]);
+  gg.onUpdate(() => { gg.opacity = 0.16 + 0.18 * Math.abs(Math.sin(time() * 2.6)); });
+  for (let i = 0; i < 5; i++) {
+    const m = add([rect(2, 2), pos(W / 2 + rand(-14, 14), 34), color(199, 123, 214), opacity(0.8), z(2)]);
+    m.onUpdate(() => { m.pos.y -= 10 * dt(); m.opacity -= 0.3 * dt(); if (m.opacity <= 0) { m.pos = vec2(W / 2 + rand(-14, 14), 34); m.opacity = 0.8; } });
+  }
+  add([rect(28, 8), pos(W / 2 - 14, 30), area(), "hollowzone"]);
+
+  const player = makePlayer(opts.from === "north" ? W / 2 - 11 : 18, opts.from === "north" ? 48 : H - 44);
+  player.onCollide("west", () => { if (!dialogOpen) go("town", { from: "east" }); });
+  player.onCollide("hollowzone", () => {
+    if (dialogOpen) return;
+    if (state.hollow === 0) {
+      say(["* A door in the rock. Purple light leaks around the edges like it can't quite be held in.", "* From inside: wingbeats. Heavy footsteps. And something humming, low and pleased.", "* You went in."], () => go("hollow"));
+    } else go("hollow");
+  });
+
+  // townsfolk. Their neighbours are the ones you meet inside.
+  npc("elder", 112, H - 52, "granny", () => say(state.hollow >= HOLLOW_ORDER.length ? [
+    "Granny Pott: They're all home. Every one of them. Crying and hugging and eating everything in my kitchen.",
+    "Granny Pott: All that's left up there is HER. Go on, child. Finish it.",
+  ] : state.hollow > 0 ? [
+    `Granny Pott: ${state.hollow} of ours came running back down that hill. Crying. Hugging everybody. Was that you?`,
+    "Granny Pott: There's more up there. Gus, Rosa, Dell, the teacher, Walt, the doctor. Bring them all back.",
+  ] : [
+    "Granny Pott: Half the town's gone up that hill into the HOLLOW. Gus the mailman went first. Then Rosa from the bakery.",
+    "Granny Pott: They come back at night. FLYING, child. With purple eyes. Then they go back in.",
+    "Granny Pott: Somebody in there is doing that to them. Somebody who likes to WATCH.",
+  ]), { footY: 16 });
+
+  npc("kid", W - 130, H - 52, "pip", () => say(state.hollow > 3 ? [
+    "Pip: Ms. Abernathy came back! She gave me homework. On a WEEKEND. It's so good to have her back.",
+    "Pip: The last flappy one is right by the door up top. It's the doctor. Be careful, she bites.",
+  ] : [
+    "Pip: Ms. Abernathy was my TEACHER. Then she flew off. I'm not sad. Okay, I'm a little sad.",
+    "Pip: The stompy ones stay on the ground. The flappy ones SWOOP when you get close.",
+    `Pip: They only come at you one at a time, though. The rest just watch. Weird, right, ${state.name}?`,
+  ]), { footY: 14 });
+
+  npc("mom", 60, 100, "dobbs", () => say(state.hollow >= 5 ? [
+    "Mrs. Dobbs: Walt's home! He's asleep on the porch, snoring! It's the best sound in the whole world.",
+    "Mrs. Dobbs: Thank you. Take some eggs. Take ALL the eggs.",
+  ] : [
+    "Mrs. Dobbs: My Walt went up to get the cows back. The cows came back. Walt didn't.",
+    "Mrs. Dobbs: If you see a big man in overalls who's forgotten his own name... that's mine. Bring him home.",
+  ]), { footY: 16 });
+
+  npc("dad", W - 150, 104, "hix", () => say(state.hollow >= HOLLOW_ORDER.length ? [
+    "Constable Hix: The doctor's back. Says there's a door open at the top of the Hollow now. Says YOU opened it.",
+    "Constable Hix: I'd come with you. I would. But somebody has to stay and mind the town. That's... that's the job.",
+  ] : [
+    "Constable Hix: I don't know what's in there, kid. A woman, folks say. Sits with a glass ball and stares into it.",
+    "Constable Hix: Sees what she likes. Takes it. Turns it. That's what she did to our mailman.",
+    "Constable Hix: The doctor went in to talk sense to her. That was yesterday.",
+  ]), { footY: 16 });
+
+  wireTalk(player);
+  wireMenu();
+  hud();
+  wait(0.3, () => say(opts.from === "north"
+    ? (state.hollow >= HOLLOW_ORDER.length ? ["* Back in the east town. The hill above it has stopped humming."] : ["* Back in the east town. The gate glows behind you."])
+    : state.hollow === 0
+    ? ["* A town. Quieter than yours. Half the doors are shut.", "* At the top of the hill: a door in the rock, glowing purple. The HOLLOW."]
+    : ["* The east town. The gate at the top of the hill is still glowing."]));
+});
+
+// ---------------------------------------------------------------- scene: the Hollow
+// MALVA's dungeon: one tall hall of black-purple stone, chains, and light falling from
+// somewhere above. Six of the east town's people guard it: three on the floor at the bottom,
+// three in the air on the sides. They come at you one at a time, ground and air by turns.
+// Beat all six and the seal at the top opens on MALVA, sitting under the ORB.
+
+scene("hollow", (opts) => {
+  opts = opts || {};
+  resetCam();
+  save("hollow");
+  music.play("danger");
+  window.__frozen = false;
+  const HX = 36, HW = W - 72; // the hall runs the full height between two thick walls
+
+  // stone
+  add([rect(W, HOLLOW_H), pos(0, 0), color(14, 8, 22)]);
+  for (let i = 0; i < 320; i++) add([rect(rand(2, 6), rand(1, 3)), pos(rand(0, W), rand(0, HOLLOW_H)), color(30, 18, 44)]);
+  add([rect(HW, HOLLOW_H), pos(HX, 0), color(40, 28, 58), z(1)]);
+  for (let y = 0; y < HOLLOW_H; y += 24) {
+    add([rect(HW, 1), pos(HX, y), color(30, 20, 46), z(1)]);
+    for (let x = HX + ((y / 24) % 2) * 20; x < HX + HW; x += 40) add([rect(1, 24), pos(x, y), color(30, 20, 46), z(1)]);
+  }
+  wall(0, 0, HX, HOLLOW_H); wall(W - HX, 0, HX, HOLLOW_H); wall(0, 0, W, 24); wall(0, HOLLOW_H - 4, W, 4);
+  // faint light falling from far above
+  [[64, 18], [148, 26], [232, 14]].forEach(([x, w], i) => {
+    const b = add([rect(w, HOLLOW_H), pos(x, 0), color(199, 123, 214), opacity(0.06), z(2)]);
+    b.onUpdate(() => { b.opacity = 0.03 + 0.05 * Math.abs(Math.sin(time() * 0.9 + i * 1.3)); });
+  });
+  // chains from the ceiling and from rings in the walls
+  const chain = (x, y, len) => { add([rect(2, len), pos(x, y), color(84, 76, 104), z(3)]); for (let k = 0; k < len; k += 7) add([rect(4, 3), pos(x - 1, y + k), color(110, 100, 132), z(3)]); };
+  [[50, 24, 90], [108, 24, 60], [212, 24, 70], [268, 24, 110]].forEach(([x, y, l]) => chain(x, y, l));
+  for (let y = 160; y < HOLLOW_H - 80; y += 120) { chain(HX + 6, y, 50 + (y % 70)); chain(W - HX - 8, y + 40, 40 + (y % 50)); }
+  // stalactites down both walls
+  for (let y = 40; y < HOLLOW_H - 40; y += 36) [HX, W - HX - 6].forEach((x) => {
+    add([rect(6, 4), pos(x, y), color(24, 14, 36), z(3)]); add([rect(4, 4), pos(x + 1, y + 4), color(24, 14, 36), z(3)]); add([rect(2, 4), pos(x + 2, y + 8), color(24, 14, 36), z(3)]);
+  });
+  // purple fire in wall sconces
+  for (let y = 100; y < HOLLOW_H; y += 130) [HX + 4, W - HX - 7].forEach((x) => {
+    const t = add([rect(3, 6), pos(x, y), color(199, 123, 214), z(2)]);
+    t.onUpdate(() => { t.color = rgb(160 + rand(0, 60), 100 + rand(0, 40), 220); });
+  });
+
+  // where everyone stands. Flyers patrol a sine path around their home; walkers pace on the floor.
+  const HOMES = {
+    clonk: { x: 80, y: 540 }, thud: { x: 160, y: 540 }, grumbo: { x: 240, y: 540 },
+    skreek: { x: 96, y: 430, amp: 52, ph: 0 }, flitz: { x: 224, y: 320, amp: 52, ph: 2 }, batty: { x: 96, y: 220, amp: 52, ph: 4 },
+  };
+  const SEAL_Y = 130, BOSS = { x: W / 2, y: 86 };
+
+  let sx = W / 2 - 11, sy = HOLLOW_H - 52;
+  if (opts.resume) {
+    if (opts.boss) sy = SEAL_Y + 40;
+    else {
+      const idx = Math.max(0, Math.min(HOLLOW_ORDER.length - 1, opts.lost ? state.hollow : state.hollow - 1));
+      const h = HOMES[HOLLOW_ORDER[idx]];
+      sx = Math.max(HX + 4, Math.min(W - HX - 26, h.x - 11)); sy = Math.min(HOLLOW_H - 52, h.y + (opts.lost ? 60 : 34));
+    }
+  }
+  const player = makePlayer(sx, sy);
+  player.onUpdate(() => { camPos(W / 2, Math.max(H / 2, Math.min(HOLLOW_H - H / 2, player.pos.y + 16))); });
+  wireMenu();
+
+  HOLLOW_ORDER.forEach((name, i) => {
+    if (i < state.hollow) return;
+    const h = HOMES[name], flying = h.amp !== undefined;
+    const e = add([sprite(ENEMIES[name].spr), pos(h.x, h.y), anchor("center"), z(flying ? 12 : 5), area({ shape: new Rect(vec2(0, 0), 30, 26) }), "henc", flying ? "hswoop" : "hstomp"]);
+    e.enemyIndex = i; e.enemyName = name; e.flying = flying; e.armed = i === state.hollow; e.diving = false;
+    let t = rand(0, 6);
+    e.onUpdate(() => {
+      e.armed = e.enemyIndex === state.hollow;
+      t += dt();
+      if (flying) {
+        const target = player.pos.add(11, 16);
+        const near = e.armed && !dialogOpen && target.dist(vec2(h.x, h.y)) < 110;
+        const before = e.pos.x;
+        if (near) {
+          // the dive: straight at you, wings beating
+          e.diving = true;
+          const d = target.sub(e.pos);
+          if (d.len() > 4) e.pos = e.pos.add(d.unit().scale(58 * dt()));
+          e.pos.y += Math.sin(t * 14) * 0.6;
+        } else {
+          e.diving = false;
+          const gx = h.x + Math.sin(t * 0.9 + h.ph) * h.amp, gy = h.y + Math.sin(t * 2.3 + h.ph) * 10;
+          e.pos = e.pos.add(vec2(gx, gy).sub(e.pos).scale(Math.min(1, 4 * dt())));
+        }
+        if (Math.abs(e.pos.x - before) > 0.05) e.flipX = e.pos.x < before;
+      } else {
+        e.pos.x = h.x + Math.sin(t * 0.8 + i) * 8;
+        e.pos.y = h.y + (Math.sin(t * 6) > 0.9 ? -2 : 0);
+        e.flipX = Math.cos(t * 0.8 + i) < 0;
+      }
+    });
+    // the armed one carries a mark, so the order is readable at a glance
+    const mark = add([text("!", { size: 10 }), pos(h.x, h.y - 22), anchor("center"), color(242, 208, 92), z(13)]);
+    mark.onUpdate(() => { mark.hidden = !e.armed || Math.floor(time() * 3) % 3 === 0; mark.pos = e.pos.add(0, -22); });
+  });
+  let hinted = false;
+  player.onCollide("henc", (e) => {
+    if (dialogOpen) return;
+    player.pos.y += 12;
+    if (e.enemyIndex !== state.hollow) {
+      if (!hinted) { hinted = true; say(["* It hisses at you, but hangs back.", "* They come one at a time. Another one wants you first."]); }
+      return;
+    }
+    say(ENEMIES[e.enemyName].meet, () => go("battle", e.enemyName));
+  });
+
+  if (state.hollow < HOLLOW_ORDER.length) {
+    // the seal: a wall of purple light across the hall, until all six are back to themselves
+    const seal = wall(HX, SEAL_Y, HW, 14, [199, 123, 214]);
+    seal.use(opacity(0.5)); seal.z = 6;
+    seal.onUpdate(() => { seal.opacity = 0.35 + 0.25 * Math.abs(Math.sin(time() * 4)); });
+    for (let k = 0; k < 6; k++) add([rect(2, 14), pos(HX + 20 + k * 40, SEAL_Y), color(244, 241, 234), opacity(0.5), z(7)]);
+    add([rect(HW, 6), pos(HX, SEAL_Y + 14), area(), "hseal"]);
+    player.onCollide("hseal", () => {
+      if (dialogOpen) return;
+      player.pos.y += 10;
+      const left = HOLLOW_ORDER.length - state.hollow;
+      say(["* A wall of purple light. It hums.", `* ${left} of hers still stand between you and whatever is on the other side.`]);
+    });
+  } else if (!state.beatMalva) {
+    // MALVA, on her chair, under the ORB
+    const spot = add([rect(90, 70), pos(BOSS.x - 45, BOSS.y - 60), color(199, 123, 214), opacity(0.14), z(1)]);
+    spot.onUpdate(() => { spot.opacity = 0.1 + 0.1 * Math.abs(Math.sin(time() * 2.2)); });
+    add([rect(44, 30), pos(BOSS.x - 22, BOSS.y - 6), color(28, 18, 44), z(3)]); add([rect(48, 6), pos(BOSS.x - 24, BOSS.y + 22), color(22, 14, 36), z(3)]);
+    const oglow = add([circle(18), pos(BOSS.x, BOSS.y - 48), color(199, 123, 214), opacity(0.3), z(3)]);
+    const orb = add([sprite("orb"), pos(BOSS.x, BOSS.y - 48), anchor("center"), rotate(0), z(4), "orb"]);
+    orb.onUpdate(() => { orb.angle = Math.sin(time() * 0.8) * 12; orb.scale = vec2(1 + 0.08 * Math.sin(time() * 2)); oglow.opacity = 0.2 + 0.15 * Math.abs(Math.sin(time() * 2.5)); });
+    const mv = add([sprite("malva"), pos(BOSS.x, BOSS.y), anchor("center"), z(5), area({ shape: new Rect(vec2(0, 0), 48, 56) }), "malvazone"]);
+    mv.onUpdate(() => { mv.pos.y = BOSS.y + Math.sin(time() * 1.5) * 1.5; });
+    player.onCollide("malvazone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.malva.meet, () => go("battle", "malva")); });
+  }
+
+  // the bottom of the hall is the way out, back to the east town
+  add([rect(60, 12), pos(W / 2 - 30, HOLLOW_H - 14), area(), "hexit"]);
+  add([text("v", { size: 8 }), pos(W / 2, HOLLOW_H - 22), anchor("center"), color(242, 208, 92), z(3)]);
+  player.onCollide("hexit", () => { if (!dialogOpen) go("town2", { from: "north" }); });
+  hud();
+  const left = HOLLOW_ORDER.length - state.hollow;
+  wait(0.3, () => say(state.hollow === 0
+    ? ["* Black stone. Purple light from somewhere far above. Chains, swaying with no wind.", "* Wingbeats, high up. Footsteps, close. Six shapes with purple eyes, and every one of them used to be somebody."]
+    : left > 0 ? [`* ${left} of hers left. The seal at the top is still humming.`]
+    : ["* The seal is gone. At the top of the hall, something purple is pulsing like a heartbeat.", "* She's up there. So is the orb."]));
+});
+
+
 // ---------------------------------------------------------------- scene: battle
 
 // Every enemy carries a `mini` block that tunes its turn minigames. Tuning is data:
@@ -971,11 +1257,95 @@ const ENEMIES = {
       { t: "juggled menacingly.", d: [0, 0] },
       { t: "laughed. It went on for a while.", d: [2, 4] },
     ],
-    win: ["LYGON: ...no encore?", "* LYGON folded up like a lawn chair and vanished in a puff of confetti.", "* Two cage doors swung open."],
-    next: () => go("end"),
+    win: [
+      "LYGON: ...no encore?",
+      "LYGON: Hee hee... you think I came here on my OWN? I was SENT, sword boy.",
+      "LYGON: She sees everything through the orb. She'll send more. Hee... hee...",
+      "* LYGON folded up like a lawn chair and vanished in a puff of confetti.",
+      "* Two cage doors swung open.",
+    ],
+    next: () => { state.beatLygon = true; go("end"); },
     mini: {
       attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.26, pick: "phase",
       phases: [{ above: 0.66, defend: "block" }, { above: 0.33, defend: "wait", fakeouts: 2 }, { above: 0, defend: "mashB", flurry: true }],
+    },
+  },
+
+  // -------- the Hollow. Every one of these is a person from the east town that MALVA turned.
+  // `zone: "hollow"` routes wins and losses back to the Hollow instead of the cave.
+  clonk: {
+    name: "CLONK", spr: "stomper1", hp: 30, weak: "ice", bg: [26, 14, 40], band: [46, 26, 66], zone: "hollow",
+    meet: ["* A big man in a torn mail carrier's uniform stomps out of the dark. His eyes glow purple.", "CLONK: MAIL. FOR. YOU.", "* He is not holding any mail."],
+    intro: ["* CLONK stomped forward! The floor cracked."],
+    attacks: [{ t: "stomped! The whole hall shook under %n!", d: [4, 7] }, { t: "swung a mailbag at %n!", d: [3, 6] }, { t: "checked an empty bag for mail.", d: [0, 0] }],
+    win: ["* CLONK sat down hard. The purple drained out of his eyes.", "Mailman: ...Gus. My name's Gus. I deliver the... I was delivering...", "Mailman: Thank you, kid. I have to go. I have SO much mail to catch up on.", "* He ran off toward the light."], small: true,
+    mini: { attack: "mash", defend: ["block"], blockZones: 2, speed: 1.2, zone: 0.28 },
+  },
+  skreek: {
+    name: "SKREEK", spr: "swooper1", hp: 34, weak: "fire", bg: [22, 10, 38], band: [42, 22, 64], zone: "hollow",
+    meet: ["* Something drops from the ceiling on ragged purple wings. It's wearing an apron.", "SKREEK: skreeeEEEEK!", "* Under the screech it almost sounds like a person."],
+    intro: ["* SKREEK circled overhead, then folded its wings!"],
+    attacks: [{ t: "swooped at %n from above!", d: [4, 7] }, { t: "screeched right in %n's ear!", d: [3, 5] }, { t: "hung upside down and thought about it.", d: [0, 0] }],
+    win: ["* SKREEK tumbled out of the air and landed in a heap of apron.", "Baker: I... I'm Rosa. I run the bakery. Why am I on the CEILING.", "Baker: Thank you. Oh, thank you. Come by the shop. Everything's free. Forever.", "* She ran off, still a little bit flapping."], small: true,
+    mini: { attack: "timing", defend: ["wait"], fakeouts: 1, speed: 1.25, zone: 0.28 },
+  },
+  thud: {
+    name: "THUD", spr: "stomper2", hp: 38, weak: "fire", bg: [28, 12, 36], band: [50, 26, 60], zone: "hollow",
+    meet: ["* A round man in a butcher's smock blocks the hall, breathing purple smoke.", "THUD: CUSTOMERS. GET. NUMBER.", "* You do not want a number."],
+    intro: ["* THUD raised two fists like hams!"],
+    attacks: [{ t: "brought both fists down on %n!", d: [5, 8] }, { t: "belly-bumped %n across the hall!", d: [4, 7] }, { t: "sneezed purple smoke. Everywhere.", d: [1, 2] }],
+    win: ["* THUD wobbled, sat, and blinked. His eyes went back to brown.", "Butcher: Dell. I'm Dell. I've got a shop. I've got... kids. What day is it?", "Butcher: You're a good egg. Thank you. I've got to get HOME.", "* He ran off, holding his smock up like a skirt."], small: true,
+    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "timing" }, defend: ["mashB", "block"], pick: "cycle", blockZones: 2, speed: 1.3, zone: 0.27 },
+  },
+  flitz: {
+    name: "FLITZ", spr: "swooper2", hp: 42, weak: "ice", bg: [20, 8, 44], band: [40, 20, 72], zone: "hollow",
+    meet: ["* A skinny shape zigzags down the hall, too fast to follow. A schoolteacher's glasses glint purple.", "FLITZ: SIT. DOWN. HANDS. FOLDED.", "* You stay standing."],
+    intro: ["* FLITZ is darting all over the place!"],
+    attacks: [{ t: "dive-bombed %n!", d: [5, 8] }, { t: "threw a piece of chalk at %n! Hard!", d: [3, 6] }, { t: "corrected %n's posture.", d: [2, 3] }],
+    win: ["* FLITZ skidded to a stop in mid-air and dropped, glasses first.", "Teacher: Ms. Abernathy. Fourth grade. I was... grading. Then the purple.", "Teacher: You've been very brave, young man. Extra credit. For life.", "* She ran off, straightening her glasses."], small: true,
+    mini: { attack: "timing", zones: 2, defend: ["wait"], fakeouts: 2, speed: 1.4, zone: 0.26 },
+  },
+  grumbo: {
+    name: "GRUMBO", spr: "stomper3", hp: 45, weak: "ice", bg: [30, 10, 30], band: [54, 22, 54], zone: "hollow",
+    meet: ["* The biggest one yet. A farmer, by the overalls, if farmers had glowing purple fists.", "GRUMBO: GET. OFF. MY. HALL.", "* The hall is not his hall."],
+    intro: ["* GRUMBO cracked his knuckles! It echoed!"],
+    attacks: [{ t: "hurled a chunk of floor at %n!", d: [5, 9] }, { t: "headbutted %n!", d: [4, 8] }, { t: "shook the chains off the ceiling! CLANG!", d: [3, 6] }],
+    win: ["* GRUMBO went down like a hay bale.", "Farmer: ...Walt. Walt Dobbs. My cows. Who's been milking my cows?!", "Farmer: You saved me, kid. Anything you need. Milk. Eggs. A tractor.", "* He ran off, yelling about cows."], small: true,
+    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["block", "mashB"], pick: "random", blockZones: 2, speed: 1.45, zone: 0.26, double: 0.25 },
+  },
+  batty: {
+    name: "BATTY", spr: "swooper3", hp: 48, weak: "fire", bg: [18, 6, 40], band: [36, 16, 70], zone: "hollow",
+    meet: ["* The last one hangs from the ceiling right above the sealed door. A doctor's coat. Purple eyes. Too many teeth.", "BATTY: OPEN WIDE.", "* Nope."],
+    intro: ["* BATTY dropped from the ceiling! It swoops! It fakes! It swoops again!"],
+    attacks: [{ t: "swooped down and raked %n!", d: [6, 9] }, { t: "bit %n! Ow!", d: [5, 8] }, { t: "said 'this won't hurt a bit'. It hurt a bit.", d: [3, 5] }],
+    win: ["* BATTY flapped once, twice, and dropped into a sitting position.", "Doctor: Dr. Okafor. I'm the town doctor. I remember... a purple light in my window...", "Doctor: Thank you. Truly. Now go finish this. She's right through that door.", "* The doctor ran off. Behind you, the seal on the door went dark."], small: true,
+    mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], fakeouts: 3, speed: 1.5, zone: 0.25 },
+  },
+  malva: {
+    name: "MALVA", spr: "malva", hp: 140, weak: "fire", bg: [16, 4, 30], band: [40, 12, 66], zone: "hollow", scale: 1.6,
+    meet: ["* A tall figure in a black cloak sits on a stone chair. Above her, an ORB hangs in the air, glowing purple.", "* Inside the orb: your house. Your street. Your MOM, looking out the window.", "MALVA: Finally. Come closer. I like to see faces.", "* You drew the sword."],
+    intro: ["MALVA: I have watched you since the storm, little one. Through the orb. Every step.", "MALVA: The clown was a toy. The townsfolk were toys. YOU are the one I wanted.", "* MALVA rose from her chair! The orb burned brighter!"],
+    attacks: [
+      { t: "glared at %n through the orb!", d: [5, 9] },
+      { t: "flicked a hand. The orb flashed! Dark bolts rained down on %n!", d: [6, 10] },
+      { t: "whispered. The chains lashed at %n!", d: [5, 8] },
+      { t: "laughed. The orb showed %n falling.", d: [3, 6] },
+    ],
+    win: [
+      "MALVA: No... NO. I SAW this. I saw you FALL...",
+      "* The orb cracked.",
+      "* ...and shattered. Light poured out.",
+      "* Every purple thing in the Hollow went out at once, like a blown candle.",
+      "* MALVA's cloak folded to the floor, empty.",
+    ],
+    next: () => { state.beatMalva = true; go("end"); },
+    mini: {
+      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.4, zone: 0.24, pick: "phase",
+      phases: [
+        { above: 0.66, defend: "block", zones: 2 },
+        { above: 0.33, defend: "wait", fakeouts: 3 },
+        { above: 0, defend: "mashB", flurry: true, double: 1, banner: "THE ORB FLARES!!" },
+      ],
     },
   },
 };
@@ -1228,13 +1598,28 @@ scene("battle", (which) => {
   onUpdate(() => bands.forEach((b, i) => { b.pos.y = ((i * 20 + time() * 25) % (H + 20)) - 10; }));
 
   const BY = 80; // the enemy stands a little high so the minigame strip fits under its HP bar
-  const bossSpr = add([sprite(def.spr), pos(W / 2, BY), anchor("center"), scale(2), z(5)]);
+  const bossSpr = add([sprite(def.spr), pos(W / 2, BY), anchor("center"), scale(def.scale || 2), z(5)]);
   bossSpr.onUpdate(() => {
     if (defending) { bossSpr.pos.y = BY + 10 + Math.abs(Math.sin(time() * 10)) * 8; bossSpr.pos.x = W / 2 + rand(-2, 2); return; }
     if (!busy && !boss.frozen) bossSpr.pos.y = BY + Math.sin(time() * 3) * 2;
   });
   const frost = add([rect(90, 84), pos(W / 2, BY), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
   frost.onUpdate(() => { frost.opacity = boss.frozen > 0 ? 0.35 : 0; });
+  // MALVA sits under the ORB: it hangs behind her, spinning slowly, pulsing purple, and burns at low HP
+  if (which === "malva") {
+    const oglow = add([circle(30), pos(W / 2, BY - 56), color(199, 123, 214), opacity(0.25), z(3), "orbglow"]);
+    const orb = add([sprite("orb"), pos(W / 2, BY - 56), anchor("center"), scale(1.4), rotate(0), z(4), "orb"]);
+    orb.onUpdate(() => {
+      const low = boss.hp / boss.maxHp < 0.34;
+      const t = time();
+      orb.angle = Math.sin(t * 0.8) * 14 + (low ? Math.sin(t * 9) * 6 : 0);
+      orb.scale = vec2(1.4 + 0.1 * Math.sin(t * (low ? 6 : 2)));
+      oglow.opacity = (low ? 0.4 : 0.18) + 0.14 * Math.abs(Math.sin(t * (low ? 7 : 2.5)));
+      oglow.radius = 26 + 6 * Math.abs(Math.sin(t * 2.5));
+    });
+    // stray purple motes drifting up out of it
+    loop(0.25, () => add([rect(2, 2), pos(W / 2 + rand(-16, 16), BY - 50), color(199, 123, 214), z(4), opacity(0.9), lifespan(0.8, { fade: 0.5 }), move(UP, rand(10, 26))]));
+  }
   // captive siblings in the final fight
   if (which === "lygon") {
     add([sprite("sis"), pos(40, 60), anchor("topleft"), z(4)]);
@@ -1259,7 +1644,8 @@ scene("battle", (which) => {
   const ebar = add([rect(100, 6), pos(W / 2 - 50, 146), color(224, 69, 63), z(21)]);
   ebar.onUpdate(() => { ebar.width = 100 * Math.max(0, boss.hp) / boss.maxHp; });
   add([text(boss.name, { size: 8 }), pos(W / 2, 136), anchor("center"), color(232, 232, 240), z(21)]);
-  if (def.small && which !== "ambush") add([text(`cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
+  const inHollow = def.zone === "hollow";
+  if (def.small && which !== "ambush") add([text(inHollow ? `hollow ${state.hollow + 1} / ${HOLLOW_ORDER.length}` : `cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
 
   const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
   const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
@@ -1371,11 +1757,12 @@ scene("battle", (which) => {
   }
 
   if (def.small && !def.next) def.next = () => {
-    state.cave += 1;
+    const key = inHollow ? "hollow" : "cave";
+    state[key] += 1;
     state.hp = Math.min(state.maxHp, state.hp + 12);
     state.pp = Math.min(state.maxPp, state.pp + 8);
-    if (state.cave % 2 === 0) state.cookies += 1;
-    go("cave", { resume: true });
+    if (state[key] % 2 === 0) state.cookies += 1;
+    go(key, { resume: true });
   };
   function hitBoss(dmg, verb) {
     boss.hp -= dmg; music.sfx("hit");
@@ -1385,19 +1772,22 @@ scene("battle", (which) => {
     wait(0.08, () => bossSpr.pos.x = W / 2);
     add([text(`${dmg}`, { size: 14 }), pos(W / 2 + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), opacity(1), lifespan(0.8), move(UP, 30)]);
     const lines = [`* ${state.name} ${verb} ${dmg} damage to ${boss.name}!`];
-    if (boss.hp <= 0) { music.sfx("win"); say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (state.cave % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next); }
+    if (boss.hp <= 0) { music.sfx("win"); const done = inHollow ? state.hollow : state.cave; say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (done % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next); }
     else say(lines, enemyTurn);
   }
 
   // which defense the enemy's tuning calls for this turn
+  function currentPhase() {
+    if (mini.pick !== "phase" || !mini.phases) return null;
+    const f = boss.hp / boss.maxHp;
+    return mini.phases.find((p) => f > p.above) || mini.phases[mini.phases.length - 1];
+  }
   function pickDefense() {
-    if (mini.pick === "phase" && mini.phases) {
-      const f = boss.hp / boss.maxHp;
-      return mini.phases.find((p) => f > p.above) || mini.phases[mini.phases.length - 1];
-    }
+    const ph = currentPhase();
+    if (ph) return ph;
     const list = mini.defend || ["block"];
     const name = mini.pick === "cycle" ? list[defTurn % list.length] : mini.pick === "random" ? choose(list) : list[0];
-    return { defend: name, fakeouts: mini.fakeouts || 0 };
+    return { defend: name, fakeouts: mini.fakeouts || 0, zones: mini.blockZones || 1 };
   }
   // a short warning in the track strip, then the defense begins
   function telegraph(txt, then, col = C_BLUE) {
@@ -1435,13 +1825,15 @@ scene("battle", (which) => {
         miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: bossSpr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
     } else {
       telegraph(`${boss.name} ATTACKS!`, () =>
-        miniCue("timing", C_BLUE, () => miniTiming({ prompt: "BLOCK! TAP A!", keys: INTERACT.concat(BACK), speed, zone: mini.zone || 0.3, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
+        miniCue("timing", C_BLUE, () => miniTiming({ prompt: "BLOCK! TAP A!", keys: INTERACT.concat(BACK), speed, zone: mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
     }
   }
 
   function enemyTurn() {
     if (boss.frozen > 0) { boss.frozen -= 1; say([`* ${boss.name} is frozen and can't move!`], () => busy = false); return; }
-    const swings = mini.double && Math.random() < mini.double ? 2 : 1;
+    const ph = currentPhase();
+    const dbl = ph && ph.double != null ? ph.double : mini.double;
+    const swings = dbl && Math.random() < dbl ? 2 : 1;
     const lines = [];
     function next(i) {
       if (i >= swings) { say(lines, () => busy = false); return; }
@@ -1457,14 +1849,18 @@ scene("battle", (which) => {
         if (state.hp <= 0) {
           music.sfx("lose");
           say(lines.concat([`* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."]),
-            () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true }); });
+            () => {
+              state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1);
+              if (inHollow) go("hollow", { resume: true, lost: true, boss: !def.small });
+              else go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true });
+            });
           return;
         }
         next(i + 1);
       });
     }
     if (swings === 2) {
-      const p = add([text("DOUBLE ATTACK!", { size: 14 }), pos(W / 2, 163), anchor("center"), color(...C_RED), z(30)]);
+      const p = add([text((ph && ph.banner) || "DOUBLE ATTACK!", { size: 14 }), pos(W / 2, 163), anchor("center"), color(...C_RED), z(30)]);
       shake(6); music.sfx("bang");
       wait(0.7, () => { destroy(p); next(0); });
     } else next(0);
@@ -1475,8 +1871,64 @@ scene("battle", (which) => {
 
 // ---------------------------------------------------------------- scene: end
 
+// After Lygon: the family is home, then the orb finds you and the story goes on east.
 scene("end", () => {
   resetCam();
+  if (state.beatLygon && !state.beatMalva) return interlude();
+  trueEnd();
+});
+
+function interlude() {
+  music.play("finis");
+  state.hp = state.maxHp; state.pp = state.maxPp;
+  save("town"); // a refresh from here lands at home with the road east open
+  add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
+  add([rect(W, 100), pos(0, 120), color(60, 46, 40)]);
+  for (let y = 132; y < 220; y += 12) add([rect(W, 1), pos(0, y), color(48, 36, 32)]);
+  const win = { x: W / 2 - 15, y: 40, w: 30, h: 22 };
+  drawWindow(win);
+  const stars = [];
+  for (let i = 0; i < 20; i++) stars.push(add([rect(1, 1), pos(win.x + rand(2, win.w - 2), win.y + rand(2, win.h - 2)), color(232, 232, 240), opacity(rand(0.4, 1)), z(3)]));
+  // everyone, close together
+  add([sprite("mom"), pos(W / 2 - 62, 108), anchor("topleft"), z(5)]);
+  add([sprite("dad"), pos(W / 2 + 44, 104), anchor("topleft"), z(5)]);
+  add([sprite(heroSprite()), pos(W / 2 - 12, 100), anchor("topleft"), z(6)]);
+  add([sprite("sis"), pos(W / 2 - 30, 112), anchor("topleft"), z(7)]);
+  add([sprite("bro"), pos(W / 2 + 14, 114), anchor("topleft"), z(7)]);
+  add([sprite("dog"), pos(W / 2 - 88, 136), anchor("topleft"), z(6)]);
+  const title = add([text("YOU SAVED THEM!", { size: 20 }), pos(W / 2, 20), anchor("center"), color(242, 208, 92), z(5)]);
+  const hintT = add([text("press SPACE to go", { size: 8 }), pos(W / 2, 226), anchor("center"), color(242, 208, 92), z(5)]);
+  hintT.hidden = true;
+  hintT.onUpdate(() => { if (!hintT.hidden) hintT.opacity = 0.5 + 0.5 * Math.abs(Math.sin(time() * 3)); });
+  let ready = false;
+  wait(0.8, () => say([
+    `${state.sis}: ${state.name}!! You came! I KNEW you'd come. I wasn't scared.`,
+    `${state.bro}: I was a little scared.`,
+    "Mom: Oh, my babies. ALL of my babies. Come here.",
+    `* Everyone hugged. Even Dad. Even ${state.dog}, sort of.`,
+    "Dad: That's my kids. That's all three of my kids.",
+    "* That night, everyone slept in the same room. Nobody argued about it.",
+  ], () => {
+    music.play("danger");
+    title.text = "...";
+    stormFlashes([win]);
+    stars.forEach((st) => st.hidden = true);
+    wait(1.4, () => say([
+      "* The window flashed PURPLE.",
+      "* Not thunder. Not the clown. Something farther away. Something WATCHING.",
+      `A VOICE: I see you, ${state.name}.`,
+      "A VOICE: I have always seen you. Through the orb. Every step. The clown was only the first thing I sent.",
+      `${state.sis}: ${state.name}... who was THAT?`,
+      `* ${state.name} put a hand on the sword.`,
+      "* GOAL: Find her. Break the orb.",
+      "* The road runs EAST from town. Whatever she is, she's that way.",
+    ], () => { ready = true; hintT.hidden = false; }));
+  }));
+  INTERACT.forEach((k) => onKeyPress(k, () => { if (ready && !dialogOpen) { music.sfx("select"); go("town"); } }));
+}
+
+// After Malva: everyone, the orb in pieces, the end.
+function trueEnd() {
   music.play("finis");
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
   for (let i = 0; i < 60; i++) {
@@ -1484,18 +1936,29 @@ scene("end", () => {
     const sp = rand(20, 50);
     c.onUpdate(() => { c.pos.y += sp * dt(); c.pos.x += Math.sin(time() * 3 + i) * 0.3; if (c.pos.y > H) c.pos.y = -5; });
   }
+  // the orb, in pieces, going dark at the top of the screen
+  const orb = add([sprite("orb"), pos(W / 2, 22), anchor("center"), opacity(0.5), z(4)]);
+  orb.onUpdate(() => { orb.opacity = 0.25 + 0.2 * Math.abs(Math.sin(time() * 0.7)); });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2, r = 14 + (i % 3) * 5;
+    const sh = add([rect(3 + (i % 2), 3), pos(W / 2 + Math.cos(a) * r, 22 + Math.sin(a) * r), color(199, 123, 214), rotate(i * 40), z(5)]);
+    sh.onUpdate(() => { sh.pos.y += Math.sin(time() * 2 + i) * 0.05; sh.angle += 20 * dt(); });
+  }
+  add([sprite("mom"), pos(W / 2 - 70, 58), anchor("center"), z(5)]);
+  add([sprite("dad"), pos(W / 2 + 70, 56), anchor("center"), z(5)]);
   add([sprite(heroSprite()), pos(W / 2, 60), anchor("center"), z(5)]);
   add([sprite("sis"), pos(W / 2 - 30, 64), anchor("center"), z(5)]);
   add([sprite("bro"), pos(W / 2 + 30, 64), anchor("center"), z(5)]);
-  add([sprite("dog"), pos(W / 2 - 56, 76), anchor("center"), z(5)]);
-  add([text("YOU SAVED THEM!", { size: 20 }), pos(W / 2, 108), anchor("center"), color(242, 208, 92), z(5)]);
-  add([text(`${state.name} rescued ${state.sis} and ${state.bro}!`, { size: 8 }), pos(W / 2, 132), anchor("center"), color(232, 232, 240), z(5)]);
-  add([text(`${state.sis}: "I wasn't scared."\n${state.bro}: "I was a little scared."`, { size: 8, align: "center", lineSpacing: 3 }), pos(W / 2, 156), anchor("center"), color(207, 207, 216), z(5)]);
-  add([text(`${state.dog} was a very good dog the whole time.`, { size: 8 }), pos(W / 2, 182), anchor("center"), color(138, 138, 153), z(5)]);
-  add([text("~ to be continued ~", { size: 8 }), pos(W / 2, 200), anchor("center"), color(138, 138, 153), z(5)]);
-  add([text("press SPACE to play again", { size: 8 }), pos(W / 2, 220), anchor("center"), color(242, 208, 92), z(5)]);
+  add([sprite("dog"), pos(W / 2 - 50, 80), anchor("center"), z(6)]);
+  add([text("YOU SAVED EVERYONE!", { size: 20 }), pos(W / 2, 104), anchor("center"), color(242, 208, 92), z(5)]);
+  add([text(`${state.name} broke the orb. Nobody is watching anymore.`, { size: 8 }), pos(W / 2, 126), anchor("center"), color(232, 232, 240), z(5)]);
+  add([text(`${state.sis}: "I wasn't scared. Either time."\n${state.bro}: "I was a little scared. Both times."`, { size: 8, align: "center", lineSpacing: 3 }), pos(W / 2, 150), anchor("center"), color(207, 207, 216), z(5)]);
+  add([text(`Mom: "All your fingers?"  Dad: "That's my kid."`, { size: 8 }), pos(W / 2, 174), anchor("center"), color(207, 207, 216), z(5)]);
+  add([text(`${state.dog} was a very good dog the whole time.`, { size: 8 }), pos(W / 2, 192), anchor("center"), color(138, 138, 153), z(5)]);
+  add([text("~ the end ~", { size: 8 }), pos(W / 2, 208), anchor("center"), color(138, 138, 153), z(5)]);
+  add([text("press SPACE to play again", { size: 8 }), pos(W / 2, 224), anchor("center"), color(242, 208, 92), z(5)]);
   clearSave();
   INTERACT.forEach((k) => onKeyPress(k, () => { Object.assign(state, START); go("title", { fresh: true }); }));
-});
+}
 
 go("title");
