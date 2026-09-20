@@ -142,8 +142,10 @@ window.music = (() => {
   };
   Object.values(T).forEach((tr) => { Object.keys(tr).forEach((k) => { if (typeof tr[k] === "string") tr[k] = tr[k].trim().split(/\s+/); }); });
 
+  // Until the per-situation tracks land, map the richer cue names onto the tracks that exist.
+  const ALIAS = { title: "home", night: "home", danger: "battle", outside: "home", boss: "battle", finis: "victory" };
   function schedule() {
-    const tr = T[current]; if (!tr) return;
+    const tr = T[current] || T[ALIAS[current]]; if (!tr) return;
     const spb = 60 / tr.bpm / 4; // seconds per 16th
     while (nextTime < ctx.currentTime + LOOKAHEAD) {
       const i = step % tr.kick.length;
