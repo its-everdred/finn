@@ -6,7 +6,7 @@ Small games, playable in the browser. Everything is static — no build step.
 
 ## games/
 
-### [Crashdown](games/crashdown/)
+### [RestoreBound](games/restorebound/)
 
 An Earthbound-inspired turn-based RPG opening.
 
@@ -17,7 +17,8 @@ brother and sister. Fight past **Bugon**, get into the tent, and bring them home
 - Name your hero, your brother, your sister, and both cats
 - Arrows, numpad (8/4/6/2) or WASD to move; `Space` is the main button; `/` is back
 - Battles: **Slash**, **PSI** (Fire, Ice, Starstorm), **Items** (Cookie, Juice)
-- Bosses are pixel versions of two crayon drawings; so is the hero
+- Progress saves automatically in the browser; **Restart from beginning** wipes it
+- The hero, both siblings and both bosses are pixel versions of crayon drawings
 
 Built on [Kaboom.js](https://kaboomjs.com) (MIT). All sprites are hand-drawn
 pixel grids in `sprites.js`, rendered to canvas at load.

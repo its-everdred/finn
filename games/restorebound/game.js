@@ -1,4 +1,4 @@
-// Crashdown — an Earthbound-inspired opening.
+// RestoreBound — an Earthbound-inspired opening.
 // Engine: Kaboom.js 3000 (MIT). Sprites live in sprites.js.
 //
 // Story: something crashes on the hill in a storm of purple light. You find a
@@ -25,6 +25,17 @@ const START = {
 const state = { name: "Finn", sis: "Lily", bro: "Max", cat1: "Pumpkin", cat2: "Smoke", maxHp: 40, maxPp: 30, ...START };
 
 // space is the main button; "/" is back. z and enter also confirm.
+const SAVE_KEY = "restorebound.save.v1";
+function save(sceneName) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ scene: sceneName, state })); } catch (e) { /* private mode etc. */ }
+}
+function loadSave() {
+  try { const raw = localStorage.getItem(SAVE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
+// The page's Restart button calls this.
+window.restoreboundRestart = () => { clearSave(); Object.assign(state, START); go("title", { fresh: true }); };
+
 const INTERACT = ["space", "z", "enter"];
 const BACK = ["/", "x", "escape"];
 
@@ -133,7 +144,8 @@ function stormFlashes(windowRect) {
 
 // ---------------------------------------------------------------- scene: title + naming
 
-scene("title", () => {
+scene("title", (opts = {}) => {
+  const saved = opts.fresh ? null : loadSave();
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
   for (let i = 0; i < 40; i++) {
     const s = add([rect(1, 1), pos(rand(0, W), rand(0, H)), color(232, 232, 240), opacity(rand(0.3, 1))]);
@@ -150,8 +162,24 @@ scene("title", () => {
     w.onUpdate(() => { w.pos.y -= 15 * dt(); });
   });
 
-  add([text("CRASHDOWN", { size: 24 }), pos(W / 2, 46), anchor("center"), color(242, 208, 92), z(5)]);
+  add([text("RESTOREBOUND", { size: 22 }), pos(W / 2, 46), anchor("center"), color(242, 208, 92), z(5)]);
   add([text("something fell out of the sky", { size: 8 }), pos(W / 2, 66), anchor("center"), color(207, 207, 216), z(5)]);
+
+  if (saved && saved.state && saved.scene) {
+    // Continue / New Game
+    let pick = 0;
+    add([text(`Welcome back, ${saved.state.name}.`, { size: 8 }), pos(W / 2, 112), anchor("center"), color(232, 232, 240), z(5)]);
+    const opts2 = ["Continue", "New Game"].map((t, i) => add([text(t, { size: 10 }), pos(W / 2 - 40 + i * 80, 140), anchor("center"), color(232, 232, 240), z(5)]));
+    const cur = add([text(">", { size: 10 }), pos(0, 140), anchor("center"), color(242, 208, 92), z(6)]);
+    cur.onUpdate(() => { cur.pos.x = opts2[pick].pos.x - opts2[pick].width / 2 - 8; opts2.forEach((o, i) => o.color = i === pick ? rgb(242, 208, 92) : rgb(232, 232, 240)); });
+    add([text("left / right, then SPACE", { size: 8 }), pos(W / 2, 168), anchor("center"), color(138, 138, 153), z(5)]);
+    ["left", "a", "4", "right", "d", "6"].forEach((k) => onKeyPress(k, () => { pick = 1 - pick; }));
+    INTERACT.forEach((k) => onKeyPress(k, () => {
+      if (pick === 0) { Object.assign(state, saved.state); go(saved.scene); }
+      else { clearSave(); Object.assign(state, START); go("title", { fresh: true }); }
+    }));
+    return;
+  }
 
   const prompts = [
     ["name", "What is YOUR name?"],
@@ -191,6 +219,7 @@ scene("title", () => {
 // Two bedrooms side by side. Left: yours, with the storm outside the window.
 // Right: your sister's, where the present is. Stairs at the bottom-left.
 scene("upstairs", () => {
+  save("upstairs");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   wall(0, 0, W, 40, [140, 170, 200]);
@@ -334,6 +363,7 @@ scene("upstairs", () => {
 // ---------------------------------------------------------------- scene: downstairs
 
 scene("downstairs", () => {
+  save("downstairs");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   wall(0, 0, W, 40, [150, 190, 220]);
@@ -388,6 +418,7 @@ scene("downstairs", () => {
 // ---------------------------------------------------------------- scene: town
 
 scene("town", () => {
+  save("town");
   add([rect(W, H), pos(0, 0), color(94, 170, 100)]);
   for (let i = 0; i < 120; i++) add([rect(1, 2), pos(rand(0, W), rand(0, H)), color(70, 140, 80)]);
   add([rect(40, H), pos(W / 2 - 20, 0), color(214, 190, 140)]);
@@ -666,8 +697,9 @@ scene("end", () => {
   add([text(`${state.sis}: "I wasn't scared."\n${state.bro}: "I was a little scared."`, { size: 8, align: "center", lineSpacing: 3 }), pos(W / 2, 156), anchor("center"), color(207, 207, 216), z(5)]);
   add([text(`${state.cat1} and ${state.cat2} were fine the whole time.`, { size: 8 }), pos(W / 2, 182), anchor("center"), color(138, 138, 153), z(5)]);
   add([text("~ to be continued ~", { size: 8 }), pos(W / 2, 200), anchor("center"), color(138, 138, 153), z(5)]);
-  add([text("press ENTER to play again", { size: 8 }), pos(W / 2, 220), anchor("center"), color(242, 208, 92), z(5)]);
-  onKeyPress("enter", () => { Object.assign(state, START); go("title"); });
+  add([text("press SPACE to play again", { size: 8 }), pos(W / 2, 220), anchor("center"), color(242, 208, 92), z(5)]);
+  clearSave();
+  INTERACT.forEach((k) => onKeyPress(k, () => { Object.assign(state, START); go("title", { fresh: true }); }));
 });
 
 go("title");
