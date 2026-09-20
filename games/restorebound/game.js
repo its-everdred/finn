@@ -1737,7 +1737,7 @@ function gradeLabel(g) { return g === "perfect" ? "PERFECT!" : g === "good" ? "G
 // taps for timing, dimmed with dots for wait. 0.8 s, then the real thing.
 function miniCue(kind, col, then) {
   const tag = "minicue", t0 = time();
-  const label = kind === "mash" ? "MASH!" : kind === "sequence" ? "TAP x3" : kind === "wait" ? "WAIT..." : "TAP!";
+  const label = kind === "mash" ? "MASH!" : kind === "sequence" ? "TAP x3" : kind === "wait" ? "WAIT..." : "WAIT!";
   add([rect(210, 42, { radius: 4 }), pos(W / 2, 176), anchor("center"), color(20, 20, 36), outline(2, rgb(...col)), z(32), tag]);
   const txt = add([text(label, { size: 18 }), pos(W / 2 + 10, 172), anchor("center"), color(...col), opacity(1), z(33), tag]);
   const btn = add([circle(12), pos(W / 2 - 74, 176), color(...col), outline(2, rgb(20, 20, 36)), opacity(1), z(33), tag]);
@@ -1799,11 +1799,16 @@ function miniTiming(o, done) {
   zones.forEach((c) => miniZone(c - gw / 2, c + gw / 2, C_GREEN, 27));
   zones.forEach((c) => miniZone(c - pw / 2, c + pw / 2, o.hot || C_GOLD, 28, "minizone"));
   const marker = miniMarker();
-  miniPrompt(o.prompt || "TAP A!", W / 2, 163, 14, o.hot || C_GOLD); miniButton(o.hot || C_GOLD);
+  const pre = o.prefix ? o.prefix + " " : "";
+  const prompt = miniPrompt(pre + "WAIT...", W / 2, 163, 14, o.hot || C_GOLD); miniButton(o.hot || C_GOLD);
   // the marker sits parked for a beat first, so a press carried over from the menu is not the tap
   const ARM = 0.3;
   let t = -ARM, over = false;
-  marker.onUpdate(() => { t += dt(); marker.pos.x = TRACK.x + Math.min(1, Math.max(0, t / dur)) * TRACK.w - 1; });
+  marker.onUpdate(() => {
+    t += dt(); marker.pos.x = TRACK.x + Math.min(1, Math.max(0, t / dur)) * TRACK.w - 1;
+    const f = t / dur, inZone = t >= 0 && zones.some((c) => Math.abs(f - c) <= gw / 2);
+    prompt.text = pre + (inZone ? "NOW!" : "WAIT..."); prompt.textSize = inZone ? 18 : 14;
+  });
   function finish(res) {
     if (over) return; over = true; off(); timer.cancel();
     destroyAll(MINI);
@@ -2028,7 +2033,7 @@ scene("battle", (which) => {
     telegraph(`${state.name} ATTACKS!`, () => {
     if (kind === "mash") miniCue("mash", C_GOLD, () => miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r))));
     else if (kind === "sequence") miniCue("sequence", C_GOLD, () => miniSequence({ speed, zone }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss")));
-    else miniCue("timing", C_GOLD, () => miniTiming({ prompt: "TAP A!", speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
+    else miniCue("timing", C_GOLD, () => miniTiming({ speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
     }, C_GOLD);
   }
 
@@ -2062,14 +2067,15 @@ scene("battle", (which) => {
         if (state.cookies <= 0) { music.sfx("back"); say(["* No cookies left!"]); return; }
         music.sfx("heal");
         state.cookies -= 1; const heal = Math.min(state.maxHp - state.hp, 15); state.hp += heal;
-        sub = null; busy = true; say([`* ${state.name} ate a Cookie. +${heal} HP!`], enemyTurn); return;
+        sub = null; menu = 0; busy = true; say([`* ${state.name} ate a Cookie. +${heal} HP!`], enemyTurn); return;
       }
       if (state.juice <= 0) { music.sfx("back"); say(["* No juice left!"]); return; }
       music.sfx("heal");
       state.juice -= 1; const heal = state.maxHp - state.hp; state.hp = state.maxHp;
-      sub = null; busy = true; say([`* ${state.name} drank the Juice Box. +${heal} HP! Full health!`], enemyTurn); return;
+      sub = null; menu = 0; busy = true; say([`* ${state.name} drank the Juice Box. +${heal} HP! Full health!`], enemyTurn); return;
     }
     const o = OPTIONS[menu];
+    menu = 0; // next turn starts on Slash: mashing A can never chain Item or PSI
     music.sfx("select");
     if (o === "PSI") { sub = "psi"; subIdx = 0; return; }
     if (o === "Item") { sub = "item"; subIdx = 0; return; }
@@ -2157,7 +2163,7 @@ scene("battle", (which) => {
         miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: bossSpr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
     } else {
       telegraph(`${boss.name} ATTACKS!`, () =>
-        miniCue("timing", C_BLUE, () => miniTiming({ prompt: "BLOCK! TAP A!", keys: INTERACT.concat(BACK), speed, zone: mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
+        miniCue("timing", C_BLUE, () => miniTiming({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
     }
   }
 
