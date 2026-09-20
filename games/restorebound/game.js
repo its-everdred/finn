@@ -22,7 +22,23 @@ SPRITE_CONTRACT.forEach((k) => {
   if (!window.SPRITES[k]) { console.warn(`sprites: "${k}" is not drawn yet; using a placeholder`); window.SPRITES[k] = PLACEHOLDER; }
 });
 // A sprite is either a row grid (shared palette) or { rows, pal } carrying its own palette.
-Object.entries(window.SPRITES).forEach(([k, v]) => loadSprite(k, Array.isArray(v) ? window.pixels(v) : window.pixels(v.rows, v.pal)));
+// Every sprite is its own texture in Kaboom, so the load is 257 image decodes. On a phone that
+// burst is the heaviest moment of the whole game: the 96 walking facings are deferred until the
+// first scene is up and then fed in small batches, and the rest go in chunks across frames.
+const SPRITE_READY = new Set();
+const spriteSrc = (v) => Array.isArray(v) ? window.pixels(v) : window.pixels(v.rows, v.pal);
+const FACING_RE = /_(d|u|l|r|dl|dr|ul|ur)$/;
+const spriteKeys = Object.keys(window.SPRITES);
+const facingKeys = spriteKeys.filter((k) => FACING_RE.test(k) && window.SPRITES[k.replace(FACING_RE, "")]);
+const coreKeys = spriteKeys.filter((k) => !facingKeys.includes(k));
+coreKeys.forEach((k) => { loadSprite(k, spriteSrc(window.SPRITES[k])); SPRITE_READY.add(k); });
+let facingQueue = facingKeys.slice();
+function loadFacingsSlowly() {
+  if (!facingQueue.length) return;
+  const batch = facingQueue.splice(0, 12);
+  Promise.all(batch.map((k) => loadSprite(k, spriteSrc(window.SPRITES[k])))).then(() => { batch.forEach((k) => SPRITE_READY.add(k)); setTimeout(loadFacingsSlowly, 120); }, () => setTimeout(loadFacingsSlowly, 120));
+}
+setTimeout(loadFacingsSlowly, 1500);
 
 // ---------------------------------------------------------------- game state
 
@@ -245,7 +261,7 @@ const FACING_HIT = {};
 function facingKey(base, dir) {
   const k = `${base}_${dir || "d"}`;
   if (FACING_HIT[k]) return k;
-  if (window.SPRITES[k]) { FACING_HIT[k] = true; return k; }
+  if (SPRITE_READY.has(k)) { FACING_HIT[k] = true; return k; }
   return base;
 }
 // direction name from a movement vector; inside the deadzone the old facing is kept
