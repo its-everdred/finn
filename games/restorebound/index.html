@@ -10,7 +10,7 @@
   html, body { margin: 0; height: 100%; background: #0b0b14; color: #e8e8f0; font-family: monospace; overscroll-behavior: none; }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 100dvh; touch-action: none; -webkit-user-select: none; user-select: none; }
   /* the game: as wide as the screen allows, but never taller than what is left after the controls */
-  #stage { position: relative; width: min(100vw, calc((100dvh - var(--controls-h) - 56px) * 4 / 3), 1280px); aspect-ratio: 4 / 3; flex: none; }
+  #stage { position: relative; width: min(100vw, calc((100dvh - var(--controls-h) - 16px) * 4 / 3), 1280px); aspect-ratio: 4 / 3; flex: none; }
   #startgate { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(11,11,20,.82); border: 0; color: #f2d05c; font-family: monospace; cursor: pointer; }
   #startgate .big { font-size: clamp(22px, 5vw, 40px); letter-spacing: 2px; }
   #startgate .small { font-size: 14px; color: #cfcfd8; }
@@ -34,9 +34,15 @@
   .pad { touch-action: none; position: relative; }
   .pad button { pointer-events: none; }
   .pad button.on, .btns button:active { background: #f2d05c; color: #0b0b14; }
-  .bar { display: flex; gap: 10px; align-items: center; font-size: 12px; opacity: .8; padding: 0 12px 8px; text-align: center; flex-wrap: wrap; justify-content: center; }
   a { color: #8fd3ff; }
-  .bar button { font: inherit; font-size: 12px; background: #14142a; color: #f2d05c; border: 1px solid #f2d05c; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+  /* settings live behind a gear in the corner so nothing is pressed by accident mid-game */
+  #gear { position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); z-index: 20; width: 40px; height: 40px; border-radius: 50%; background: rgba(20,20,42,.85); color: #cfcfd8; border: 1px solid rgba(207,207,216,.5); font-size: 22px; line-height: 1; cursor: pointer; }
+  #gear:hover, #gear.open { color: #f2d05c; border-color: #f2d05c; }
+  #settings { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 46px); right: max(8px, env(safe-area-inset-right)); z-index: 20; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: #14142a; border: 1px solid #f2d05c; border-radius: 8px; font-size: 12px; min-width: 200px; }
+  #settings[hidden] { display: none; }
+  #settings button { font: inherit; font-size: 13px; background: #0b0b14; color: #f2d05c; border: 1px solid #f2d05c; border-radius: 4px; padding: 8px 10px; cursor: pointer; text-align: left; }
+  #settings a { padding: 4px 2px; }
+  #settings .kbd { color: #8a8a99; font-size: 11px; line-height: 1.4; }
 </style>
 </head>
 <body>
@@ -63,26 +69,31 @@
       <button class="a" data-key=" " aria-label="confirm">A</button>
     </div>
   </div>
-  <div class="bar">
-    <span class="kbd">Arrows, numpad or WASD to move &middot; SPACE to talk &amp; confirm &middot; / to go back</span>
+  <button id="gear" aria-label="settings" title="Settings">&#9881;</button>
+  <div id="settings" hidden>
     <button id="mute" title="Toggle music">Mute (M)</button>
     <button id="restart" title="Erase saved progress and start from the beginning">Restart from beginning</button>
     <a href="../../">all games</a>
+    <span class="kbd">Arrows / WASD to move &middot; SPACE confirm &middot; / back &middot; M mute</span>
   </div>
   <script src="https://unpkg.com/kaboom@3000.1.17/dist/kaboom.js"></script>
   <script src="music.js"></script>
   <script src="sprites.js"></script>
   <script>
     const canvas = document.getElementById("game");
+    const gear = document.getElementById("gear"), settings = document.getElementById("settings");
+    const closeSettings = () => { settings.hidden = true; gear.classList.remove("open"); };
+    gear.addEventListener("click", (e) => { e.stopPropagation(); settings.hidden = !settings.hidden; gear.classList.toggle("open", !settings.hidden); });
+    document.addEventListener("click", (e) => { if (!settings.hidden && !settings.contains(e.target)) closeSettings(); });
     // The start gate is a real button: its click is the user gesture that unlocks audio on iOS.
     const gate = document.getElementById("startgate");
     const openGate = () => { window.music.unlock(); gate.hidden = true; canvas.focus(); };
     gate.addEventListener("click", openGate);
     document.getElementById("restart").addEventListener("click", () => {
-      if (confirm("Erase your saved game and start over?")) { window.restoreboundRestart(); canvas.focus(); }
+      if (confirm("Erase your saved game and start over?")) { window.restoreboundRestart(); closeSettings(); canvas.focus(); }
     });
     document.getElementById("mute").addEventListener("click", (e) => {
-      const m = window.music.toggleMute(); e.target.textContent = m ? "Unmute (M)" : "Mute (M)"; canvas.focus();
+      const m = window.music.toggleMute(); e.target.textContent = m ? "Unmute (M)" : "Mute (M)"; closeSettings(); canvas.focus();
     });
     // Every on-screen control synthesizes the keyboard event the game already understands.
     const CODES = { ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", " ": "Space", "/": "Slash", Enter: "Enter", Backspace: "Backspace" };
