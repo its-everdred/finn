@@ -2154,9 +2154,10 @@ function miniPrompt(txt, x, y, size, col) {
 }
 // a big round button next to the prompt: gold on your turn, blue on theirs. Reads without words.
 function miniButton(col, x = 34, y = 163) {
-  add([circle(11), pos(x, y), color(...col), outline(2, rgb(20, 20, 36)), z(30), MINI, "minibtn"]);
+  const c = add([circle(11), pos(x, y), color(...col), outline(2, rgb(20, 20, 36)), z(30), MINI, "minibtn"]);
   const a = add([text("A", { size: 12 }), pos(x, y + 1), anchor("center"), color(20, 20, 36), z(31), MINI]);
   a.onUpdate(() => { a.scale = vec2(1 + 0.15 * Math.abs(Math.sin(time() * 8))); });
+  return [c, a];
 }
 function miniTrack() {
   return add([rect(TRACK.w, TRACK.h), pos(TRACK.x, TRACK.y), color(20, 20, 36), outline(1, rgb(...C_INK)), z(26), MINI]);
@@ -2191,7 +2192,7 @@ function miniCue(kind, col, then) {
   btn.onUpdate(() => {
     const t = time() - t0;
     if (kind === "mash") { const sc = 1 + 0.35 * Math.abs(Math.sin(t * 22)); btn.scale = vec2(sc); a.scale = vec2(sc); }
-    else if (kind === "wait") { btn.opacity = 0.35; a.opacity = 0.35; txt.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t * 4)); }
+    else if (kind === "wait") { btn.hidden = true; a.hidden = true; txt.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t * 4)); }
     else { const sc = t % 0.4 < 0.12 ? 1.4 : 1; btn.scale = vec2(sc); a.scale = vec2(sc); }
   });
   if (kind === "timing" || kind === "sequence") {
@@ -2246,7 +2247,7 @@ function miniTiming(o, done) {
   zones.forEach((c) => miniZone(c - pw / 2, c + pw / 2, o.hot || C_GOLD, 28, "minizone"));
   const marker = miniMarker();
   const pre = o.prefix ? o.prefix + " " : "";
-  const prompt = miniPrompt(pre + "WAIT...", W / 2, 163, 14, o.hot || C_GOLD); miniButton(o.hot || C_GOLD);
+  const prompt = miniPrompt(pre + "WAIT...", W / 2, 163, 14, o.hot || C_GOLD); const btn = miniButton(o.hot || C_GOLD);
   // the marker sits parked for a beat first, so a press carried over from the menu is not the tap
   const ARM = 0.3;
   let t = -ARM, over = false;
@@ -2254,6 +2255,7 @@ function miniTiming(o, done) {
     t += dt(); marker.pos.x = TRACK.x + Math.min(1, Math.max(0, t / dur)) * TRACK.w - 1;
     const f = t / dur, inZone = t >= 0 && zones.some((c) => Math.abs(f - c) <= gw / 2);
     prompt.text = pre + (inZone ? "NOW!" : "WAIT..."); prompt.textSize = inZone ? 18 : 14;
+    btn.forEach((b) => b.hidden = !inZone); // WAIT shows no button; it appears only at NOW!
   });
   function finish(res) {
     if (over) return; over = true; off(); timer.cancel();
@@ -2320,7 +2322,7 @@ function miniWait(o, done) {
   const speed = o.speed || 1, fakes = o.fakeouts || 0, spr = o.spr;
   const windup = rand(0.8, 1.6) / speed + fakes * 0.35;
   const home = spr ? spr.pos.clone() : null;
-  const prompt = miniPrompt("WAIT...", W / 2, 163, 18, C_BLUE); miniButton(C_BLUE);
+  const prompt = miniPrompt("WAIT...", W / 2, 163, 18, C_BLUE); const wbtn = miniButton(C_BLUE); wbtn.forEach((b) => b.hidden = true);
   miniTrack();
   const pulse = add([rect(TRACK.w - 2, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), opacity(0.3), z(27), MINI]);
   let t = 0, phase = "wait", early = false, over = false;
@@ -2353,7 +2355,7 @@ function miniWait(o, done) {
   });
   wait(windup, () => {
     if (over) return;
-    phase = "now"; prompt.text = "NOW!"; prompt.textSize = 20; prompt.color = rgb(...C_BLUE);
+    phase = "now"; prompt.text = "NOW!"; prompt.textSize = 20; prompt.color = rgb(...C_BLUE); wbtn.forEach((b) => b.hidden = false);
     lunge(10, 0.25); shake(6); music.sfx("slash");
     wait(0.4, () => finish(early ? "early" : "miss"));
   });
