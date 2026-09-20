@@ -77,9 +77,11 @@
     <span class="kbd">Arrows / WASD to move &middot; SPACE confirm &middot; / back &middot; M mute</span>
   </div>
   <script src="https://unpkg.com/kaboom@3000.1.17/dist/kaboom.js"></script>
-  <script src="music.js"></script>
-  <script src="sprites.js"></script>
-  <script src="decor.js"></script>
+  <script>
+    // Always fetch the newest build: GitHub Pages caches these files for ~10 minutes, so a plain
+    // refresh could otherwise mix an old game.js with a new sprites.js. Synchronous writes keep order.
+    (function () { const v = Date.now(); ["music.js", "sprites.js", "decor.js"].forEach((f) => document.write('<script src="' + f + '?v=' + v + '"><\/script>')); window.__buildV = v; })();
+  </script>
   <script>
     const canvas = document.getElementById("game");
     const gear = document.getElementById("gear"), settings = document.getElementById("settings");
@@ -176,6 +178,6 @@
     document.getElementById("nameok").addEventListener("click", submit);
     document.getElementById("stage").addEventListener("touchend", () => window.music.unlock(), { passive: true });
   </script>
-  <script src="game.js"></script>
+  <script>document.write('<script src="game.js?v=' + window.__buildV + '"><\/script>');</script>
 </body>
 </html>
