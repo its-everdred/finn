@@ -34,6 +34,9 @@ window.music = (() => {
     try {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain(); master.gain.value = muted ? 0 : 0.55; master.connect(ctx.destination);
+      // iOS can drop the context to "suspended"/"interrupted" after a media element starts or on
+      // a route change; once we have had a gesture, always bring it back.
+      ctx.onstatechange = () => { if (gestured && ctx.state !== "running") { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } };
       // a touch of compression keeps the drums from clipping the lead
       const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
       master.disconnect(); master.connect(comp); comp.connect(ctx.destination);
@@ -592,7 +595,10 @@ window.music = (() => {
   // a touchend/click handler and (b) keeps Web Audio under the ringer/silent
   // switch until a media element has played, so we play a silent clip once to
   // move the session to the playback category.
-  let armed = false, keeper = null;
+  let armed = false, keeper = null, gestured = false;
+  function resumeSoon() {
+    [60, 250, 700, 1500].forEach((ms) => setTimeout(() => { if (ctx && ctx.state !== "running") { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } }, ms));
+  }
   // one second of 8-bit silence as a WAV, built in memory
   function silentWav() {
     const rate = 8000, n = rate, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
@@ -605,17 +611,20 @@ window.music = (() => {
   }
   function unlock() {
     if (!ensure()) return;
+    gestured = true;
     if (ctx.state === "suspended") ctx.resume();
     if (!keeper) {
       // iOS keeps Web Audio under the ringer switch until a media element is *playing*;
       // a looping silent clip, kept referenced, moves the session to playback and holds it there.
       try {
         keeper = new Audio(silentWav()); keeper.loop = true; keeper.setAttribute("playsinline", ""); keeper.muted = false;
-        const pr = keeper.play(); if (pr && pr.catch) pr.catch(() => { keeper = null; });
+        const pr = keeper.play();
+        if (pr && pr.then) pr.then(() => { if (ctx.state !== "running") ctx.resume(); resumeSoon(); }).catch(() => { keeper = null; });
       } catch (e) { keeper = null; }
       try { const b = ctx.createBuffer(1, 1, 22050), src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(0); } catch (e) { /* ignore */ }
     }
     start();
+    resumeSoon();
   }
   function arm() {
     if (armed) return; armed = true;
@@ -679,7 +688,7 @@ window.music = (() => {
     unlock,
     // diagnostics: is the context running, is a track scheduled, and is there signal on the master bus?
     debug() {
-      const out = { hasCtx: !!ctx, ctxState: ctx ? ctx.state : null, current, timerRunning: !!timer, muted, masterGain: master ? master.gain.value : null, rms: null, sampleRate: ctx ? ctx.sampleRate : null };
+      const out = { hasCtx: !!ctx, ctxState: ctx ? ctx.state : null, gestured, keeper: keeper ? (keeper.paused ? "paused" : "playing") : null, current, timerRunning: !!timer, muted, masterGain: master ? master.gain.value : null, rms: null, sampleRate: ctx ? ctx.sampleRate : null };
       if (ctx && master) {
         if (!this._an) { this._an = ctx.createAnalyser(); this._an.fftSize = 2048; master.connect(this._an); }
         const buf = new Float32Array(this._an.fftSize); this._an.getFloatTimeDomainData(buf);

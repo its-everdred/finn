@@ -76,9 +76,8 @@
     const canvas = document.getElementById("game");
     // The start gate is a real button: its click is the user gesture that unlocks audio on iOS.
     const gate = document.getElementById("startgate");
-    const openGate = (e) => { if (e) e.preventDefault(); window.music.unlock(); gate.hidden = true; canvas.focus(); };
+    const openGate = () => { window.music.unlock(); gate.hidden = true; canvas.focus(); };
     gate.addEventListener("click", openGate);
-    gate.addEventListener("touchend", openGate, { passive: false });
     document.getElementById("restart").addEventListener("click", () => {
       if (confirm("Erase your saved game and start over?")) { window.restoreboundRestart(); canvas.focus(); }
     });
