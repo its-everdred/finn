@@ -178,13 +178,20 @@ function makeFollowers(player) {
   const names = state.party || [];
   if (!names.length) return [];
   const GAP = 14, trail = [];
-  const fol = names.map((nm, i) => add([sprite(nm), pos(player.pos.x, player.pos.y + 6), anchor("topleft"), z(9.5 - i * 0.01), "follower"]));
+  const fol = names.map((nm, i) => add([sprite(facingKey(nm, "d")), pos(player.pos.x, player.pos.y + 6), anchor("topleft"), z(9.5 - i * 0.01), "follower"]));
+  fol.forEach((f, i) => { f.spriteBase = names[i]; f.facing = "d"; });
   let last = player.pos.clone();
   player.followUpd = player.onUpdate(() => {
     if (player.pos.dist(last) > 0.4) { trail.unshift(player.pos.clone()); last = player.pos.clone(); if (trail.length > GAP * names.length + 2) trail.pop(); }
     fol.forEach((f, i) => {
       const t = trail[Math.min(trail.length - 1, GAP * (i + 1))];
-      if (t) { const target = t.add(3, 6); f.pos = f.pos.lerp(target, Math.min(1, 12 * dt())); }
+      if (t) {
+        const target = t.add(3, 6), was = f.pos.clone();
+        f.pos = f.pos.lerp(target, Math.min(1, 12 * dt()));
+        // each follower faces the way it last moved, from its own position delta
+        const fd = facingFrom(f.pos.sub(was), f.facing);
+        if (fd !== f.facing) { f.facing = fd; f.use(sprite(facingKey(f.spriteBase, fd))); }
+      }
       f.z = 9.5 + f.pos.y / 1000;
     });
   });
@@ -211,11 +218,28 @@ function fullHeal() {
 }
 
 function heroSprite() { return state.giantSword ? "hero_giant" : state.hasSword ? "hero_sword" : "hero"; }
+// 8-direction facings. sprites.js may carry `<base>_<dir>` (d u l r dl dr ul ur) drawn on the
+// same canvas and foot anchor as the base; where a facing is not drawn yet, the base stands in.
+// Hits are cached; a miss is re-checked each call so art that lands later is picked up.
+const FACING_HIT = {};
+function facingKey(base, dir) {
+  const k = `${base}_${dir || "d"}`;
+  if (FACING_HIT[k]) return k;
+  if (window.SPRITES[k]) { FACING_HIT[k] = true; return k; }
+  return base;
+}
+// direction name from a movement vector; inside the deadzone the old facing is kept
+function facingFrom(v, last = "d") {
+  if (!v || v.len() < 0.05) return last;
+  const a = Math.atan2(v.y, v.x); // 0 = right, +y = down (screen space)
+  return ["r", "dr", "d", "dl", "l", "ul", "u", "ur"][((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8];
+}
 function makePlayer(x, y) {
   const p = add([
-    sprite(heroSprite()), pos(x, y), rotate(0),
+    sprite(facingKey(heroSprite(), "d")), pos(x, y), rotate(0),
     area({ shape: new Rect(vec2(6, 22), 10, 9) }), body(), anchor("topleft"), z(10), "player",
   ]);
+  p.facing = "d";
   const SPEED = 85;
   p.onUpdate(() => {
     if (dialogOpen || window.__frozen) return;
@@ -224,7 +248,13 @@ function makePlayer(x, y) {
     if (isKeyDown("right") || isKeyDown("d") || isKeyDown("6")) d.x += 1;
     if (isKeyDown("up") || isKeyDown("w") || isKeyDown("8")) d.y -= 1;
     if (isKeyDown("down") || isKeyDown("s") || isKeyDown("2")) d.y += 1;
-    if (d.len() > 0) p.move(d.unit().scale(SPEED));
+    if (d.len() > 0) {
+      p.move(d.unit().scale(SPEED));
+      // the facing re-derives from heroSprite() each swap, so a sword picked up elsewhere
+      // (player.use(sprite("hero_sword"))) keeps its base on the next turn
+      const f = facingFrom(d, p.facing);
+      if (f !== p.facing) { p.facing = f; p.use(sprite(facingKey(heroSprite(), f))); }
+    }
     p.z = 10 + p.pos.y / 1000; // walk behind/in front of npcs by y
   });
   return p;
@@ -237,7 +267,8 @@ function wall(x, y, w, h, col) {
 }
 
 function npc(spr, x, y, tag, talk, opts = {}) {
-  const n = add([sprite(spr), pos(x, y), area({ shape: new Rect(vec2(2, opts.footY ?? 12), 12, 8) }), body({ isStatic: true }), anchor("topleft"), z(9 + y / 1000), tag, "npc"]);
+  // opts.face: one of d u l r dl dr ul ur; uses `<spr>_<face>` when drawn, else spr
+  const n = add([sprite(opts.face ? facingKey(spr, opts.face) : spr), pos(x, y), area({ shape: new Rect(vec2(2, opts.footY ?? 12), 12, 8) }), body({ isStatic: true }), anchor("topleft"), z(9 + y / 1000), tag, "npc"]);
   n.talk = talk;
   n.baseY = y; n.cut = false;
   n.onUpdate(() => { if (!n.cut) n.pos.y = n.baseY + (Math.sin(time() * 2 + x) > 0.85 ? -1 : 0); });
