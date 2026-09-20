@@ -333,20 +333,22 @@ const KID = [
 ];
 
 const DOG = [
-  "...jjj......jjj...",
-  "..juuuj....juuuj..",
-  "..juuuujjjjuuuuj..",
-  "..juuuuuuuuuuuuj..",
-  "..jujjuuuuuujjuj..",
-  "..jjwjuuuuuujwjj..",
-  "..juuuuujjuuuuuj..",
-  "...juuuujjuuuuuujj",
-  "....juuuuuuuuuuuuj",
-  "....juuuuuuuuuuuj.",
-  "....juuujjuuujjuj.",
-  "....juuj..juuj.j..",
-  "....jUUj..jUUj....",
-  "....jjjj..jjjj....",
+  "..jjjj..............jj..",
+  ".jddddj............jSSj.",
+  "jddddddjjjjjjjjjjjjSSSj.",
+  "jdddSSSSSSSSSSSSSSSSSSj.",
+  "jddSjSSsssSSSSSSSSSSSj..",
+  "jdSSSSSssSSSSSSSSSSSj...",
+  "jSSSSSSSSSSSSSSSSSSSSj..",
+  "jSSjjSSSSSSSSSSSSSSSSSj.",
+  ".jSSSSSSSSSSSSSSSSSSSSj.",
+  ".jSjjjSSSSSSSSSSSSSSSj..",
+  "..jSmSSSSSSSSSSSSSSSj...",
+  "...jjSSjjjjjSSjjjjSSj...",
+  ".....jSj...jSj..jSj.....",
+  ".....jSj...jSj..jSj.....",
+  ".....jSj...jSj..jSj.....",
+  ".....jjj...jjj..jjj.....",
 ];
 
 // ---------------------------------------------------------------- BUGON (52 x 40)

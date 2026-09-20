@@ -115,7 +115,7 @@ function wireTalk(player) {
   INTERACT.forEach((k) => onKeyPress(k, () => {
     if (dialogOpen) return;
     const me = player.pos.add(11, 26);
-    let best = null, bestD = 30;
+    let best = null, bestD = 36;
     get("npc").forEach((n) => {
       const d = me.dist(n.pos.add(n.width / 2, n.height - 4));
       if (d < bestD) { bestD = d; best = n; }
@@ -294,7 +294,11 @@ scene("upstairs", () => {
   }
 
   // the spare key lives behind your brother's bed
-  const brobed = add([rect(50, 6), pos(W / 2 + 14, 92), area(), opacity(0), "npc", "brobed"]);
+  const brobed = add([rect(50, 14), pos(W / 2 + 14, 88), area(), opacity(0), "npc", "brobed"]);
+  if (state.kidnapped && !state.hasKey) {
+    const ks = add([text("*", { size: 8 }), pos(W / 2 + 38, 84), color(242, 208, 92), z(9)]);
+    ks.onUpdate(() => { ks.hidden = Math.floor(time() * 4) % 3 === 0; ks.pos.x = W / 2 + 38 + Math.sin(time() * 5) * 10; if (state.hasKey) destroy(ks); });
+  }
   brobed.talk = () => {
     if (state.hasKey) { say([`* Behind ${state.bro}'s bed: dust, a sock, and one very old cracker.`]); return; }
     if (!state.kidnapped) { say([`* ${state.bro}'s bed. There's something shiny wedged behind it.`, `* ${state.bro} is standing right there, though. Later.`]); return; }
