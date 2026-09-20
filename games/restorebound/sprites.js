@@ -32,6 +32,9 @@ const PAL = {
   "a": "#5ad6cf", "A": "#2fa39c",
   // clown eyes (yellow-green)
   "1": "#e4de5a", "2": "#b3ad3c",
+  // friends: lilac highlight, dark-blue hair, saber glow, saturn body, wood
+  "N": "#e6c4f7", "Z": "#2a3f8f", "H": "#1b2a66", "4": "#5ad6cf66",
+  "3": "#ffe3d2", "6": "#f2c3ad", "7": "#b07a4a",
 };
 
 function pixels(rows, pal = PAL) {
@@ -1279,6 +1282,347 @@ const SWORD = [
   "....jj....",
 ];
 
+// ---------------------------------------------------------------- friends and party (hand-drawn)
+// Pip, Zed, Bruno and Bloop join the hero's party. Same chibi rules as the
+// family: navy outline, three tones lit from the top left, big eyes with a
+// catchlight, rosy cheeks. The *_B variants are the party seen from behind
+// for the battle screen; hair and colours carry the identity.
+
+// pip: potion maker, lilac hair in two buns, goggles pushed up, apron with a bottle, green vial held out (20 x 26)
+const PIP = [
+  ".jjj..jjjjjjjj..jjj.",
+  "jpppjjppppNNppjjpppj",
+  "jpNpjpNNpppppppjpNpj",
+  "jPPPjpjjjjjjjjjjPPPj",
+  "....jpjwajjjaajpj...",
+  "....jpjjjjjjjjjpj...",
+  "....jjhssssssssjj...",
+  "....jsssssssssssj...",
+  "....jsjjjsssjjjsj...",
+  "....jsjwjsssjwjsj...",
+  "....jsjjjsssjjjsj...",
+  "....jsxxsssssxxsj...",
+  "....jSssjssssjssj...",
+  ".jjjjjSSsjjjjsSj....",
+  ".juj..jjSSSSSjj.....",
+  "jjLjjjjPPPPPPPjj....",
+  "jLVLjsPPwwwwwPPsj...",
+  "jLLLjsPPwwGwwPPsj...",
+  "jsssjsPPwwgwwPPsj...",
+  ".jjjjj.PwwwwwP.sj...",
+  ".......jPwwwPj.jj...",
+  "......jPPPPPPPj.....",
+  ".......jssjssj......",
+  "......jjjjjjjjj.....",
+  ".....juuujjjuuuj....",
+  ".....jjjjjjjjjjj....",
+];
+
+// zed: spiky dark-blue hair, black jacket over a white tee, cyan lightsaber with a white core and a faint glow, toothy grin (20 x 26)
+const ZED = [
+  "....j....j....j.....",
+  "...jBj..jBj..jZj.44.",
+  "..jBBBjjBBZjjZZHjaa4",
+  "..jBBBBZZZZZZZZH4wa4",
+  "...jZjjjjjjjjjZj4wa4",
+  "...jZhssssssssjj4wa4",
+  "...jsssssssssssj4wa4",
+  "...jsjjjsssjjjsj4wa4",
+  "...jsjwjsssjwjsj4wa4",
+  "...jsjjjsssjjjsj4wa4",
+  "...jsxxsssssxxsj4wa4",
+  "...jSssjwwwwjssj4wa4",
+  "....jSSsjjjjsSj4wa4.",
+  ".....jjSSSSSjj.4wa4.",
+  "....jjkkkkkkkjjjQej.",
+  "...jskkQwwwQkksjssj.",
+  "...jskkQwwwQkkkjjjj.",
+  "...jskkkwwwkkkj.....",
+  "...jskkkwwwkkkj.....",
+  "...js.kkkkkkkj......",
+  "...jj.jQQQQQj.......",
+  "......jQQjQQj.......",
+  "......jQQjQQj.......",
+  ".....jjjjjjjjj......",
+  "....jkkkjjjkkkj.....",
+  "....jjjjjjjjjjj.....",
+];
+
+// bruno: very muscular karate boy, white gi and black belt, red headband, square shoulders, thick arms with fists up, determined brows (24 x 27)
+const BRUNO = [
+  "........jjjjjjjj........",
+  "......jjddddddddjj......",
+  ".....jddfddddddddddj....",
+  ".....jrrrrrrrrrrrrjrj...",
+  ".....jRrrrrrrrrrrRj.jrj.",
+  ".....jjhsssssssssjj.jj..",
+  ".....jssjjssssjjssj.....",
+  ".....jsjjjssssjjjsj.....",
+  ".....jsjwjssssjwjsj.....",
+  ".jjj.jsjjjssssjjjsj.jjj.",
+  "jsssjjsxxssssssxxsjjsssj",
+  "jssSjjSsssjjjjsssSjjSssj",
+  ".jsSj.jSSssssssSSj.jsSj.",
+  ".jssj..jjSSSSSSjj..jssj.",
+  ".jssjjjjjjjjjjjjjjjjssj.",
+  ".jssjwwwwessssewwwwjssj.",
+  ".jsSjwwwwwessewwwwwjsSj.",
+  ".jsSjwwwwwweewwwwwwjsSj.",
+  ".jjjjwwwwwwwwwwwwwwjjjj.",
+  "....jkkkkkkQQkkkkkkj....",
+  "....jwwwwwkwwkwwwwwj....",
+  "....jwwwwwkwwkwwwwwj....",
+  "....jwwwwwwjjwwwwwwj....",
+  "....jWWWWWWjjWWWWWWj....",
+  "....jjjjjjjjjjjjjjjj....",
+  "...jsssssssjjsssssssj...",
+  "...jjjjjjjjjjjjjjjjjj...",
+];
+
+// bloop: a round pale-pink creature that is mostly head, big round nose, dot eyes, thick brows, one hair curl with a red bow, no arms, stubby feet (22 x 20)
+const BLOOP = [
+  "........jrrjrrj.......",
+  "........jRrjrRj.......",
+  "..........jdj.........",
+  "........jjjdjjj.......",
+  "......jj3333333jj.....",
+  "....jj3hh33333336jj...",
+  "...j33hh3333333366j...",
+  "..j33h3333333333366j..",
+  ".j333jjj333333jjj366j.",
+  ".j3333j33333333j3366j.",
+  "j33333333jjjj33333666j",
+  "j3333333jhsssj3333666j",
+  "j333333jshssssj333666j",
+  "j333333jSsssSSj333666j",
+  ".j333333jSSSSj333666j.",
+  ".j3333333jjjj3336666j.",
+  "..j3333333333336666j..",
+  "...j66666666666666j...",
+  "....jssj......jssj....",
+  "....jjjj......jjjj....",
+];
+
+// rock: grey cartoon boulder with a highlight and two cracks (18 x 14)
+const ROCK = [
+  "......jjjjjj......",
+  "....jjzzqqqqjj....",
+  "...jzzzqqqqqqqj...",
+  "..jzzqqqqqqqqqQj..",
+  ".jzqqqqqjqqqqqQQj.",
+  ".jqqqqqjqqqqqqQQj.",
+  "jqqqqqjqqqqqqqQQQj",
+  "jqqqqqqqqqjqqqQQQj",
+  "jqqqqqqqqjqqqqQQQj",
+  "jQqqqqqqqqqqqqQQQj",
+  ".jQqqqqqqqqqqQQQj.",
+  ".jQQqqqqqqqQQQQQj.",
+  "..jjQQQQQQQQQQjj..",
+  "....jjjjjjjjjj....",
+];
+
+// rock2: wider two-lobed boulder (24 x 16)
+const ROCK2 = [
+  "........jjjjjj..........",
+  "......jjzzqqqqjj........",
+  ".....jzzzqqqqqqqj..jjj..",
+  "....jzzqqqqqqqqqqjjqqqj.",
+  "...jzqqqqqqjqqqqqqqqqqQj",
+  "..jzqqqqqqjqqqqqqqqqqQQj",
+  ".jqqqqqqqjqqqqqqqqqqQQQj",
+  ".jqqqqqqjqqqqqqjqqqqQQQj",
+  "jqqqqqqqqqqqqqjqqqqQQQQj",
+  "jqqqqqqqqqqqqqqjqqqQQQQj",
+  "jQqqqqqqqqqqqqqqqqqQQQQj",
+  "jQqqqqqqqqqqqqqqqqQQQQQj",
+  ".jQQqqqqqqqqqqqqqQQQQQj.",
+  ".jQQQqqqqqqqqqqQQQQQQQj.",
+  "..jjQQQQQQQQQQQQQQQQjj..",
+  "....jjjjjjjjjjjjjjjj....",
+];
+
+// bush: round green bush with a highlight and red berries (18 x 16)
+const BUSH = [
+  "....jjj...jjjj....",
+  "..jjgVVjjjgLggjj..",
+  ".jgVVgggggggggggj.",
+  ".jgVgggggggrggggj.",
+  "jgggggggggggggGGGj",
+  "jggggrgggggggggGGj",
+  "jggggggggggrggGGGj",
+  "jgggggggggggggGGGj",
+  "jgggrgggggggggGGGj",
+  "jGggggggrggggGGGGj",
+  "jGgggggggggggGGGGj",
+  ".jGGgggggggGGGGGj.",
+  ".jGGGgggrggGGGGGj.",
+  "..jGGGGGGGGGGGGj..",
+  "...jjGGGGGGGGjj...",
+  ".....jjjjjjjj.....",
+];
+
+// sign: small wooden signpost (14 x 16)
+const SIGN = [
+  ".jjjjjjjjjjjj.",
+  "j7uuuuuuuuuuUj",
+  "j7uuuuuuuuuuUj",
+  "j7uUUUUUUUUuUj",
+  "j7uuuuuuuuuuUj",
+  "j7uUUUUUUuuuUj",
+  "j7uuuuuuuuuuUj",
+  "jUUUUUUUUUUUUj",
+  ".jjjjjjjjjjjj.",
+  ".....juuUj....",
+  ".....juuUj....",
+  ".....juuUj....",
+  ".....juuUj....",
+  ".....juuUj....",
+  ".....juuUj....",
+  ".....jjjj.....",
+];
+
+// hero from behind: blonde hair, white tee, blue shorts, sneakers (24 x 28)
+const HERO_B = [
+  "........jjjjjjjj........",
+  "......jjyyiiyyyyjj......",
+  ".....jyyiiiyyyyyyyj.....",
+  "....jyyiiyyyyyyyyyyj....",
+  "....jyyyyyyyyyyyyYyj....",
+  "...jyYyyyyyyyyyyYYyyj...",
+  "...jyYyyyyyyyyyyYYyyj...",
+  "...jyyyyyyyyyyyyyYYyj...",
+  "...jyyyyyyyyyyyyyYYyj...",
+  "...jyyyyyyyyyyyyyyYYYj..",
+  "...jsyyyyyyyyyyyyyYYsj..",
+  "....jYyyyyyyyyyyyYYYj...",
+  "....jsjYYYYYYYYYYYjsj...",
+  ".....jSSsssssssssSSj....",
+  "......jjSSSSSSSSSjj.....",
+  ".....jjwwwwvvwwwwwjj....",
+  "....jswwwwwvvwwwwwwsj...",
+  "....jswwwwwwwwwwwwwsj...",
+  "....js.wwwwwwwwwwww.sj..",
+  "....jj.jWWWWWWWWWWj.jj..",
+  ".......jbbbblbbbbbj.....",
+  ".......jbbbbbbbbbbj.....",
+  ".......jBBBBBBBBBBj.....",
+  ".......jssssjjssssj.....",
+  ".......jSssj..jssSj.....",
+  "......jjjjjj..jjjjjj....",
+  ".....jkkkkkkjjkkkkkkj...",
+  ".....jwwwwwwjjwwwwwwj...",
+];
+
+// pip from behind: lilac buns, goggle strap, purple dress with the apron bow at the back (20 x 24)
+const PIP_B = [
+  ".jjj..jjjjjjjj..jjj.",
+  "jpppjjppppNNppjjpppj",
+  "jpNpjpNNpppppppjpNpj",
+  "jPPPjppppppppppjPPPj",
+  "....jpkkkkkkkkkPj...",
+  "....jpppppppppPPj...",
+  "....jspppppppPPsj...",
+  "....jspppppppPPsj...",
+  "....jpppppppppPPj...",
+  "....jPPpppppppPPj...",
+  ".....jPPPPPPPPPj....",
+  "......jjSSSSSjj.....",
+  ".....jjPPPPPPPjj....",
+  "....jsPPPPPPPPPsj...",
+  "....jsPPPPPPPPPsj...",
+  "....jsPPwwjwwPPsj...",
+  "....js.PPwjwPP.sj...",
+  "....jj.jPwPwPj.jj...",
+  "......jPPPPPPPj.....",
+  ".......jssjssj......",
+  ".......jssjssj......",
+  "......jjjjjjjjj.....",
+  ".....juuujjjuuuj....",
+  ".....jjjjjjjjjjj....",
+];
+
+// zed from behind: spiky dark-blue hair, black jacket, saber raised on his left (20 x 24)
+const ZED_B = [
+  ".....j....j....j....",
+  ".44.jBj..jBj..jZj...",
+  "4aajBBBjjBBZjjZZHj..",
+  "4aw4BBBBZZZZZZZZHHj.",
+  "4aw4jBBZZZZZZZZHj...",
+  "4aw4jBZZZZZZZZZHj...",
+  "4aw4jsZZZZZZZZHsj...",
+  "4aw4jsZZZZZZZZHsj...",
+  "4aw4jZZZZZZZZZHHj...",
+  "4aw4.jHZZZZZZZHj....",
+  "4aw4..jjSSSSSjj.....",
+  "4aw4.jjkkkkkkkjj....",
+  "4aw4jskkkkkkkkksj...",
+  "4aw4jskkkkkkkkksj...",
+  "jeQjjskkkkkkkkksj...",
+  "jssjjskkkkkkkkksj...",
+  "jjjjjj.kkkkkkk.sj...",
+  ".......jQQQQQj.jj...",
+  ".......jQQjQQj......",
+  ".......jQQjQQj......",
+  ".......jQQjQQj......",
+  "......jjjjjjjjj.....",
+  ".....jkkkjjjkkkj....",
+  ".....jjjjjjjjjjj....",
+];
+
+// bruno from behind: headband knot and tails, white gi back, belt, fists up (24 x 24)
+const BRUNO_B = [
+  "........jjjjjjjj........",
+  "......jjddddddddjj......",
+  ".....jddfddddddddddj....",
+  ".....jrrrrrrrrrrrrj.....",
+  ".....jRrrrrjjrrrrRj.....",
+  ".....jdddddrrdddddj.....",
+  ".....jsddddrrddddsj.....",
+  ".....jsddddrrdddDsj.....",
+  ".....jddddddddddDDj.....",
+  ".jjj..jDDddddddDDj..jjj.",
+  "jsssj..jjSSSSSSjj..jsssj",
+  "jssSjjjjjjjjjjjjjjjjSssj",
+  ".jssjwwwwwwwwwwwwwwjssj.",
+  ".jsSjwwwwwwwwwwwwwwjSsj.",
+  ".jsSjwwwwwwwwwwwwwwjSsj.",
+  ".jjjjwwwwwwwwwwwwwwjjjj.",
+  "....jkkkkkkkkkkkkkkj....",
+  "....jwwwwwwwwwwwwwwj....",
+  "....jwwwwwwjjwwwwwwj....",
+  "....jwwwwwwjjwwwwwwj....",
+  "....jWWWWWWjjWWWWWWj....",
+  "....jjjjjjjjjjjjjjjj....",
+  "...jSSSSSSSjjSSSSSSSj...",
+  "...jjjjjjjjjjjjjjjjjj...",
+];
+
+// bloop from behind: the round body, the curl and bow, stubby feet (22 x 20)
+const BLOOP_B = [
+  "........jrrjrrj.......",
+  "........jRrjrRj.......",
+  "..........jdj.........",
+  "........jjjdjjj.......",
+  "......jj3333333jj.....",
+  "....jj3hh33333336jj...",
+  "...j33hh3333333366j...",
+  "..j33h3333333333366j..",
+  ".j333333333333336666j.",
+  ".j333333333333336666j.",
+  "j33333333333333336666j",
+  "j33333333333333336666j",
+  "j33333333333333336666j",
+  "j33333333333333336666j",
+  ".j333333333333336666j.",
+  ".j333333333333336666j.",
+  "..j3333333333336666j..",
+  "...j66666666666666j...",
+  "....jssj......jssj....",
+  "....jjjj......jjjj....",
+];
+
+// ---------------------------------------------------------------- end friends
+
 window.SPRITES = {
   hero: HERO, hero_sword: HERO_SWORD, hero_giant: HERO_GIANT, mom: MOM, dad: DAD, sis: SIS, bro: BRO,
   cat1: CAT_ORANGE, cat2: CAT_GREY,
@@ -1288,5 +1632,7 @@ window.SPRITES = {
   orb: ORB, malva: MALVA, swooper1: SWOOPER1, swooper2: SWOOPER2, swooper3: SWOOPER3,
   stomper1: STOMPER1, stomper2: STOMPER2, stomper3: STOMPER3, hollowgate: HOLLOWGATE, king: KING, man: MAN,
   tree: TREE, house: HOUSE, wagon: WAGON, tent: TENT, present: PRESENT, sword: SWORD,
+  pip: PIP, zed: ZED, bruno: BRUNO, bloop: BLOOP, rock: ROCK, rock2: ROCK2, bush: BUSH, sign: SIGN,
+  hero_b: HERO_B, pip_b: PIP_B, zed_b: ZED_B, bruno_b: BRUNO_B, bloop_b: BLOOP_B,
 };
 window.pixels = pixels;
