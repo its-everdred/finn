@@ -628,8 +628,8 @@ scene("town", () => {
 
   const player = makePlayer(W / 2 - 11, H - 44);
 
-  // the cave mouth at the top of the hill, right behind the wreck
-  add([sprite("cavemouth"), pos(W / 2 - 24, 0), anchor("topleft"), z(1)]);
+  // the big top at the top of the hill, right behind the wreck: the wagon crashed into its entrance
+  add([sprite("tentmouth"), pos(W / 2 - 24, 0), anchor("topleft"), z(1)]);
   const cglow = add([rect(30, 20), pos(W / 2 - 15, 14), color(199, 123, 214), opacity(0.2), z(2)]);
   cglow.onUpdate(() => { cglow.opacity = 0.12 + 0.12 * Math.abs(Math.sin(time() * 2.5)); });
   add([rect(24, 8), pos(W / 2 - 12, 26), area(), "cavezone"]);
@@ -637,7 +637,7 @@ scene("town", () => {
     if (dialogOpen) return;
     if (state.cave === 0 && !state.beatBugon) {
       say([
-        "* A cave. The wagon crashed right into the mouth of it.",
+        "* The big top. The wagon crashed right through its entrance flap.",
         `* From inside: circus music, laughing, and two small voices yelling "${state.name}!!"`,
         `* ${state.name} drew the sword and went in.`,
       ], () => go("cave"));
@@ -675,7 +675,154 @@ scene("town", () => {
     : ["* The air smells like popcorn and lightning.", "* Up the path, a cave is glowing purple."]));
 });
 
-// ---------------------------------------------------------------- scene: cave
+// ---------------------------------------------------------------- scene: cave (the big top)
+// The first dungeon is the inside of LYGON's circus tent: the big top that crashed on the hill.
+// The scene keeps its old name ("cave") and the save fields (cave, beatBugon, branch*,
+// giantSword) so older saves load; the tunnel geometry (segments, the fork at segment 3,
+// six ordered encounters, Bugon at segs[8], Lygon at the top) is unchanged under the paint.
+
+const BT = {
+  canvasA: [128, 34, 44], canvasB: [172, 134, 60], seam: [60, 20, 28], rim: [255, 214, 120],
+  floor: [206, 170, 108], floorDark: [178, 140, 84], floorLight: [230, 200, 146],
+  net: [26, 24, 38], mesh: [74, 70, 96], ring: [82, 46, 58], ringLine: [224, 69, 63],
+  boards: [150, 105, 60], boardLine: [120, 80, 45],
+  confetti: [[224, 69, 63], [242, 208, 92], [58, 111, 216], [79, 176, 106], [199, 123, 214], [255, 255, 255]],
+};
+// once-per-run finds (a page load is a run; the save keeps its old field set)
+window.__bigtop = window.__bigtop || { sparkle: false, cage: false, fell: false, pushes: 0 };
+
+// red and yellow canvas over a whole region; everything else draws on top of it
+function tentCanvas(w, h) {
+  for (let x = 0; x < w; x += 12) add([rect(12, h), pos(x, 0), color(...(((x / 12) | 0) % 2 ? BT.canvasB : BT.canvasA)), z(0)]);
+  for (let y = 100; y < h; y += 100) add([rect(w, 1), pos(0, y), color(...BT.seam), opacity(0.6), z(0.2)]);
+}
+// a sawdust floor rect: lit rim underneath, speckles on top
+function sawdust(x, y, w, h) {
+  add([rect(w + 4, h + 4), pos(x - 2, y - 2), color(...BT.rim), z(0.5)]);
+  add([rect(w, h), pos(x, y), color(...BT.floor), z(1)]);
+  const n = Math.floor(w * h / 150);
+  for (let i = 0; i < n; i++) add([rect(rand(1, 3), 1), pos(x + rand(0, w - 3), y + rand(0, h - 1)), color(...(Math.random() < 0.5 ? BT.floorDark : BT.floorLight)), z(1.1)]);
+}
+// a safety net: dark with a square mesh
+function netFloor(x, y, w, h) {
+  add([rect(w, h), pos(x, y), color(...BT.net), z(1.2)]);
+  for (let i = 0; i <= w; i += 5) add([rect(1, h), pos(x + Math.min(i, w - 1), y), color(...BT.mesh), z(1.3)]);
+  for (let j = 0; j <= h; j += 5) add([rect(w, 1), pos(x, y + Math.min(j, h - 1)), color(...BT.mesh), z(1.3)]);
+}
+// a string of twinkling bulbs
+function stringLights(x, y, w) {
+  add([rect(w, 1), pos(x, y), color(40, 20, 30), z(2)]);
+  for (let i = 3; i < w - 2; i += 9) {
+    const b = add([rect(3, 3), pos(x + i, y + 1), color(...choose(BT.confetti)), opacity(1), z(2.1)]);
+    const ph = rand(0, 6), sp = rand(2, 4.5);
+    b.onUpdate(() => { b.opacity = 0.4 + 0.6 * Math.abs(Math.sin(time() * sp + ph)); });
+  }
+}
+// a trapeze swinging from its pivot
+function trapeze(x, y, ph = 0, amp = 26) {
+  const t = add([sprite("trapeze"), pos(x, y), anchor("top"), rotate(0), z(2.5), "trapeze"]);
+  t.onUpdate(() => { t.angle = Math.sin(time() * 1.6 + ph) * amp; });
+  return t;
+}
+// a sweeping spotlight: a soft ellipse of light wandering over the floor
+function spotlight(cx, cy, rx, ry, sp, ph) {
+  const s = add([circle(24), pos(cx, cy), color(255, 240, 200), opacity(0.16), z(3), "spot"]);
+  const core = add([circle(13), pos(cx, cy), color(255, 250, 230), opacity(0.12), z(3.1)]);
+  s.onUpdate(() => { const t = time() * sp + ph; s.pos = vec2(cx + Math.sin(t) * rx, cy + Math.cos(t * 0.7) * ry); core.pos = s.pos; });
+  return s;
+}
+// an animal cage that rattles when the player comes near; opts.talk makes it openable
+function animalCage(x, y, animal, player, opts = {}) {
+  const big = !!opts.big, cw = big ? 26 : 22, ch = big ? 36 : 24;
+  const back = add([rect(cw - 4, ch - 5), pos(x + 2, y + 2), color(24, 18, 30), z(2)]);
+  const ax = x + (opts.ax ?? (big ? 3 : 5)), ay = y + (opts.ay ?? (big ? 7 : 11));
+  const a = animal ? add([sprite(animal), pos(ax, ay), anchor("topleft"), z(2.2)]) : null;
+  const c = add([sprite(big ? "bigcage" : "cage"), pos(x, y), anchor("topleft"), z(2.4), ...(opts.talk ? ["npc"] : [])]);
+  if (opts.talk) c.talk = opts.talk;
+  let near = false;
+  c.onUpdate(() => {
+    if (!player) return;
+    const d = player.pos.add(11, 26).dist(vec2(x + cw / 2, y + ch));
+    const isNear = d < 40;
+    if (isNear && !near) music.sfx("move");
+    near = isNear;
+    const jit = isNear ? (Math.sin(time() * 40) > 0 ? 1 : -1) : 0;
+    c.pos.x = x + jit; back.pos.x = x + 2 + jit;
+    if (a) { a.pos.x = ax + jit; a.pos.y = ay + (isNear ? Math.abs(Math.sin(time() * 14)) * -2 : (Math.sin(time() * 2 + x) > 0.8 ? -1 : 0)); }
+  });
+  return c;
+}
+// a big striped ball bouncing back and forth; a low ball that meets the player shoves them
+function bouncingBall(x0, x1, y, ph, player, shove) {
+  const shadow = add([circle(6), pos(x0, y), color(0, 0, 0), opacity(0.22), z(1.5), scale(1, 0.5)]);
+  const b = add([sprite("ball"), pos(x0, y), anchor("center"), rotate(0), z(8), "ball"]);
+  let cool = 0;
+  b.floorPos = vec2(x0, y); b.hgt = 0;
+  b.onUpdate(() => {
+    const t = time() * 0.8 + ph;
+    const fx = x0 + (x1 - x0) * (0.5 + 0.5 * Math.sin(t));
+    const hgt = Math.abs(Math.sin(t * 3.2)) * 34;
+    b.floorPos = vec2(fx, y); b.hgt = hgt;
+    shadow.pos = vec2(fx, y); shadow.scale = vec2(1 - hgt / 100, 0.5 * (1 - hgt / 100));
+    b.pos = vec2(fx, y - hgt - 7); b.z = 10 + (y + 1) / 1000; b.angle = t * 60;
+    cool -= dt();
+    const feet = player.pos.add(11, 26);
+    if (hgt < 11 && cool <= 0 && feet.dist(b.floorPos) < 14) {
+      cool = 0.6; music.sfx("bang");
+      const dir = feet.sub(b.floorPos); shove(dir.len() > 0.1 ? dir.unit() : vec2(0, 1));
+    }
+  });
+  return b;
+}
+// confetti drifting down the whole screen (fixed to the camera)
+function confettiRain(n = 36) {
+  for (let i = 0; i < n; i++) {
+    const c = add([rect(2, 2), pos(rand(0, W), rand(0, H)), color(...choose(BT.confetti)), fixed(), z(40), opacity(0.9)]);
+    const sp = rand(7, 16), sw = rand(0, 6);
+    c.onUpdate(() => { c.pos.y += sp * dt(); c.pos.x += Math.sin(time() * 2 + sw) * 9 * dt(); if (c.pos.y > H) { c.pos.y = -2; c.pos.x = rand(0, W); } });
+  }
+}
+// a puff of sawdust at the hero's feet while walking
+function dustAtFeet(player) {
+  let last = player.pos.clone(), t = 0;
+  player.onUpdate(() => {
+    const moved = player.pos.dist(last) > 0.3; last = player.pos.clone();
+    t -= dt();
+    if (moved && t <= 0) {
+      t = 0.12;
+      const d = add([rect(2, 2), pos(player.pos.x + rand(5, 15), player.pos.y + 29), color(...BT.floorLight), opacity(0.85), z(9), lifespan(0.35, { fade: 0.3 })]);
+      d.onUpdate(() => { d.pos.y -= 9 * dt(); d.pos.x += rand(-0.3, 0.3); });
+    }
+  });
+}
+// bleachers down both screen edges, with a few fans that bob; `skip` is a y-range to leave open
+function bleachers(h, skip) {
+  for (let y = 0; y < h; y += 15) {
+    if (skip && y + 15 > skip[0] && y < skip[1]) continue;
+    add([sprite("bleacher"), pos(0, y), anchor("topleft"), z(1.8)]);
+    add([sprite("bleacher"), pos(W - 16, y), anchor("topleft"), z(1.8)]);
+    if (Math.random() < 0.45) {
+      const fx = Math.random() < 0.5 ? rand(1, 9) : W - 16 + rand(1, 9), fy = y + rand(0, 8);
+      const f = add([sprite(choose(["fan1", "fan2", "fan3", "fan4"])), pos(fx, fy), anchor("topleft"), z(1.9)]);
+      const ph = rand(0, 6);
+      f.onUpdate(() => { f.pos.y = fy + (Math.sin(time() * 3 + ph) > 0.7 ? -1 : 0); });
+    }
+  }
+}
+// the battle scene's big-top backdrop (only for enemies flagged `tent`): canvas at the top,
+// a ring floor at the bottom, a spotlight on the performer. Everything sits under the sprites.
+function tentBackdrop() {
+  for (let i = 0; i < 22; i++) add([rect(16, 58), pos(i * 16 - 8, 0), color(...(i % 2 ? [214, 168, 70] : [190, 52, 54])), z(2)]);
+  for (let i = 0; i < 21; i++) add([circle(8), pos(i * 16 + 8, 58), color(...(i % 2 ? [190, 52, 54] : [214, 168, 70])), z(2)]);
+  for (let x = 6; x < W; x += 12) {
+    const b = add([circle(2), pos(x, 72), color(...choose(BT.confetti)), opacity(1), z(2)]);
+    b.onUpdate(() => { b.opacity = 0.45 + 0.55 * Math.abs(Math.sin(time() * 3 + x)); });
+  }
+  add([rect(W, H - 112), pos(0, 112), color(58, 34, 40), z(2)]);
+  add([rect(W, 4), pos(0, 110), color(...BT.ringLine), z(2)]); add([rect(W, 1), pos(0, 114), color(255, 250, 230), z(2)]);
+  const sp = add([circle(58), pos(W / 2, 84), color(255, 240, 200), opacity(0.12), z(2)]);
+  sp.onUpdate(() => { sp.opacity = 0.09 + 0.05 * Math.abs(Math.sin(time() * 2)); });
+}
 
 scene("cave", (opts = {}) => {
   resetCam();
@@ -684,58 +831,101 @@ scene("cave", (opts = {}) => {
   window.__frozen = false;
   // roll the fork once per run
   if (!state.branchSide) { state.branchSide = choose(["left", "right"]); state.branchEnemy = choose(CAVE_ENEMIES); save("cave"); }
-  const BRANCH = 3; // the fork leaves the main tunnel at this segment (after two fights)
+  const BRANCH = 3; // the fork leaves the main aisle at this segment (after two fights)
+  const TIGHT = 6;  // the tightrope segment (Redstack checks tickets on the beam)
+  const found = window.__bigtop;
 
-  // rock
-  add([rect(W, CAVE_H), pos(0, 0), color(38, 32, 54)]);
-  for (let i = 0; i < 260; i++) add([rect(rand(2, 5), rand(2, 4)), pos(rand(0, W), rand(0, CAVE_H)), color(52, 44, 72)]);
-  // winding path: alternating offsets, 44 wide
+  // canvas walls behind everything
+  tentCanvas(W, CAVE_H);
+  // winding aisle: alternating offsets, 44 wide
   const segs = [];
   for (let y = CAVE_H; y > 0; y -= 100) {
     const off = Math.sin(y / 100) * 60;
     segs.push({ x: W / 2 - 22 + off, y: y - 100, w: 44, h: 100 });
   }
-  const FLOOR = [96, 84, 112];
+  const last = segs.length - 1, top = segs[last], ringC = vec2(top.x + 22, 50);
   segs.forEach((sg, i) => {
-    add([rect(sg.w, sg.h), pos(sg.x, sg.y), color(...FLOOR), z(1)]);
+    if (i === TIGHT) { sawdust(sg.x, sg.y, sg.w, 15); sawdust(sg.x, sg.y + 85, sg.w, 15); }
+    else if (i === last) sawdust(ringC.x - 50, sg.y + 3, 100, 94);
+    else sawdust(sg.x, sg.y, sg.w, sg.h);
     if (segs[i + 1]) {
       const a = Math.min(sg.x, segs[i + 1].x), b = Math.max(sg.x, segs[i + 1].x) + 44;
-      add([rect(b - a, 30), pos(a, sg.y - 15), color(...FLOOR), z(1)]);
+      sawdust(a, sg.y - 15, b - a, 30);
     }
   });
-  // the fork: two corridors and two rooms off the branch segment
+  // the fork: two corridors run off the screen; where they go is only visible once you walk there
   const bs = segs[BRANCH];
   const corrY = bs.y + 38, corrH = 26;
-  // two corridors run off the screen; where they go is only visible once you walk there
-  add([rect(bs.x, corrH), pos(0, corrY), color(...FLOOR), z(1)]);
-  add([rect(W - (bs.x + 44), corrH), pos(bs.x + 44, corrY), color(...FLOOR), z(1)]);
+  sawdust(0, corrY, bs.x, corrH);
+  sawdust(bs.x + 44, corrY, W - (bs.x + 44), corrH);
   add([rect(6, corrH), pos(0, corrY), area(), "sideL"]);
   add([rect(6, corrH), pos(W - 6, corrY), area(), "sideR"]);
 
-  // walls: rock on both sides of every segment, connector band, and around the fork
+  // walls: canvas on both sides of every segment, the connector band, and around the fork
+  const tsg = segs[TIGHT], tR = Math.max(tsg.x, segs[TIGHT + 1].x) + 46;
+  const pit = { x: tR + 14, y: tsg.y + 18, w: 64, h: 64 };
   segs.forEach((sg, i) => {
     const nx = segs[i + 1] ? segs[i + 1].x : sg.x;
-    const L = Math.min(sg.x, nx) - 2, R = Math.max(sg.x, nx) + 46;
     if (i === BRANCH) {
-      // rock above and below both corridors, built from the fork segment's own edges
       const bl = sg.x - 2, br = sg.x + 46;
       wall(0, sg.y + 15, bl, corrY - (sg.y + 15)); wall(0, corrY + corrH, bl, sg.y + 85 - (corrY + corrH));
       wall(br, sg.y + 15, W - br, corrY - (sg.y + 15)); wall(br, corrY + corrH, W - br, sg.y + 85 - (corrY + corrH));
+    } else if (i === last) {
+      wall(0, sg.y + 15, ringC.x - 40, sg.h - 30); wall(ringC.x + 40, sg.y + 15, W - (ringC.x + 40), sg.h - 30);
+    } else if (i === TIGHT) {
+      wall(0, sg.y + 15, sg.x - 2, sg.h - 30);
+      // the landing pit sits in the canvas to the right; walls wrap around it
+      wall(sg.x + 46, sg.y + 15, pit.x - (sg.x + 46), sg.h - 30);
+      wall(pit.x + pit.w, sg.y + 15, W - (pit.x + pit.w), sg.h - 30);
+      wall(pit.x, sg.y + 12, pit.w, pit.y - (sg.y + 12)); wall(pit.x, pit.y + pit.h, pit.w, sg.y + 88 - (pit.y + pit.h));
     } else {
-      wall(0, sg.y + 15, L, sg.h - 30);
-      wall(R, sg.y + 15, W - R, sg.h - 30);
+      wall(0, sg.y + 15, sg.x - 2, sg.h - 30);
+      wall(sg.x + 46, sg.y + 15, W - (sg.x + 46), sg.h - 30);
     }
     if (segs[i + 1]) { wall(0, sg.y - 15, Math.min(sg.x, nx), 30); wall(Math.max(sg.x, nx) + 44, sg.y - 15, W - (Math.max(sg.x, nx) + 44), 30); }
   });
   wall(0, CAVE_H - 4, W, 4); wall(0, 0, W, 4);
-  // torches
+
+  // ---- dressing: bleachers, lights, banners, trapezes
+  bleachers(CAVE_H, [corrY - 6, corrY + corrH + 6]);
   segs.forEach((sg, i) => {
-    if (i % 2) return;
-    const t = add([rect(3, 6), pos(sg.x - 8, sg.y + 40), color(255, 160, 64), z(2)]);
-    t.onUpdate(() => { t.color = rgb(255, 130 + rand(0, 60), 40); });
+    if (i === last) return;
+    stringLights(18, sg.y + 6, W - 36);
+    const nx = segs[i + 1] ? segs[i + 1].x : sg.x;
+    const L = Math.min(sg.x, nx), R = Math.max(sg.x, nx) + 44;
+    if (i !== BRANCH && i !== TIGHT) {
+      add([sprite(i % 2 ? "banner" : "banner2"), pos(sg.x - 16, sg.y + 18), anchor("topleft"), z(2.2)]);
+      add([sprite(i % 2 ? "banner2" : "banner"), pos(sg.x + 48, sg.y + 18), anchor("topleft"), z(2.2)]);
+    }
+    if (i % 3 === 1) trapeze(L - 30, sg.y + 20, i);
+    if (i % 3 === 2) trapeze(R + 30, sg.y + 22, i * 1.7);
   });
 
+  // ---- the entrance: ticket booth, sign, popcorn
   const start = segs[0];
+  add([sprite("booth"), pos(start.x - 40, start.y + 40), anchor("topleft"), z(2.5), "npc", "booth"]).talk = () =>
+    say(["* The ticket booth. Nobody is in it.", "* A sign says: NO REFUNDS. NO EXCEPTIONS. NO SWORDS.", `* ${state.name} kept the sword.`]);
+  add([rect(96, 14), pos(start.x + 22 - 48, start.y + 20), color(...BT.ringLine), outline(2, rgb(242, 208, 92)), z(2.6)]);
+  add([text("LYGON'S BIG TOP", { size: 8 }), pos(start.x + 22, start.y + 27), anchor("center"), color(255, 244, 200), z(2.7)]);
+  add([sprite("popcorn"), pos(start.x + 54, start.y + 52), anchor("topleft"), z(2.5), "npc", "popcorn"]).talk = () =>
+    say(["* A popcorn stand. Still warm.", "* It smells incredible. Now is not the time."]);
+  add([sprite("popcorn"), pos(bs.x + 54, bs.y + 66), anchor("topleft"), z(2.5)]);
+  add([sprite("hoop"), pos(segs[1].x + 50, segs[1].y + 52), anchor("topleft"), z(2.5)]);
+  add([sprite("hoop"), pos(segs[5].x + 50, segs[5].y + 50), anchor("topleft"), z(2.5)]);
+  add([sprite("hoop"), pos(segs[4].x - 26, segs[4].y + 54), anchor("topleft"), z(2.5)]);
+  add([sprite("cannon"), pos(segs[7].x + 50, segs[7].y + 44), anchor("topleft"), z(2.5)]);
+
+  // ---- the ring at the top: red rope, dark floor, posts, and the two hanging cages
+  add([circle(44), pos(ringC), color(255, 250, 230), z(1.2)]);
+  add([circle(41), pos(ringC), color(...BT.ringLine), z(1.21)]);
+  add([circle(38), pos(ringC), color(...BT.ring), z(1.22)]);
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; add([sprite("post"), pos(ringC.x + Math.cos(a) * 44, ringC.y + Math.sin(a) * 44 - 6), anchor("center"), z(2.3)]); }
+  [[ringC.x - 78, "sis"], [ringC.x + 52, "bro"]].forEach(([cx, who]) => {
+    add([rect(2, 12), pos(cx + 12, 4), color(140, 140, 150), z(2)]);
+    animalCage(cx, 14, who, null, { big: true, ax: 3, ay: 6 });
+  });
+
+  // ---- the hero
   let sx = start.x + 11, sy = CAVE_H - 60;
   if (opts.resume) {
     if (opts.at === "branch") { sx = bs.x + 11; sy = corrY - 20; state.branchSeen = true; }
@@ -751,49 +941,164 @@ scene("cave", (opts = {}) => {
   makeFollowers(player);
   player.onUpdate(() => { camPos(W / 2, Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16))); });
   wireMenu();
+  wireTalk(player);
+  dustAtFeet(player);
+  confettiRain(36);
+  // a shove from a ball: a burst of velocity that dies out over a few frames
+  let push = vec2(0, 0);
+  const shove = (dir) => { push = dir.scale(70); found.pushes += 1; };
+  player.onUpdate(() => { if (push.len() > 1) { player.move(push); push = push.scale(Math.pow(0.02, dt())); } });
 
-  // encounters, one per bend, in order
+  // ---- cages along the route: a lion, a bear (openable), a monkey
+  animalCage(segs[1].x - 34, segs[1].y + 40, "lion", player);
+  animalCage(segs[5].x - 32, segs[5].y + 24, "monkey", player, { ax: 6, ay: 9 });
+  animalCage(segs[2].x + 52, segs[2].y + 42, "bear", player, { talk: () => {
+    if (found.cage) { say(["* The bear is asleep again.", "* You already took the cookie. The bear knows."]); return; }
+    found.cage = true; state.cookies += 1; music.sfx("pickup");
+    say(["* You lift the latch. The bear does not move.", "* It is sitting on a plate of cookies. It lets you take ONE.", `* ${state.name} got a Cookie!`]);
+  } });
+
+  // ---- bouncing balls (dodgeable; never a battle)
+  bouncingBall(start.x + 8, start.x + 36, start.y + 72, 0, player, shove);
+  bouncingBall(segs[2].x + 8, segs[2].x + 36, segs[2].y + 80, 2.1, player, shove);
+  bouncingBall(segs[7].x + 8, segs[7].x + 36, segs[7].y + 78, 4.2, player, shove);
+  bouncingBall(segs[8].x + 8, segs[8].x + 36, segs[8].y + 80, 1.3, player, shove);
+
+  // ---- spotlights: stand in one for a moment and something glints once per run
+  const spots = [spotlight(segs[1].x + 22, segs[1].y + 50, 34, 30, 0.9, 0), spotlight(segs[7].x + 22, segs[7].y + 50, 34, 30, 0.7, 2)];
+  let lit = 0;
+  player.onUpdate(() => {
+    if (found.sparkle || dialogOpen) return;
+    const feet = player.pos.add(11, 26);
+    const inSpot = spots.find((s) => feet.dist(s.pos) < 22);
+    lit = inSpot ? lit + dt() : 0;
+    if (lit > 0.8) {
+      found.sparkle = true; music.sfx("unlock");
+      const where = feet.add(0, -30);
+      const it = add([sprite("sparkle"), pos(where), anchor("center"), z(9), area({ shape: new Rect(vec2(0, 0), 12, 12) }), "sparkle"]);
+      it.onUpdate(() => { it.pos.y = where.y + Math.sin(time() * 5) * 2; it.hidden = Math.floor(time() * 8) % 4 === 0; });
+      say(["* The spotlight found something in the sawdust!", "* It glints."]);
+    }
+  });
+  player.onCollideUpdate("sparkle", (it) => {
+    if (dialogOpen || !it.exists()) return;
+    destroy(it); music.sfx("pickup");
+    if (Math.random() < 0.5) { state.juice += 1; say(["* A JUICE BOX, dropped by someone in the audience.", `* ${state.name} got a Juice Box!`]); }
+    else { state.cookies += 1; say(["* A COOKIE with one bite out of it. Still counts.", `* ${state.name} got a Cookie!`]); }
+  });
+
+  // ---- the tightrope: net floor, a 6 px beam, and a landing pit off to the side
+  const beamX = tsg.x + 22;
+  netFloor(tsg.x, tsg.y + 15, 44, 70);
+  add([rect(6, 70), pos(beamX - 3, tsg.y + 15), color(...BT.rim), z(1.4)]);
+  add([rect(2, 70), pos(beamX - 1, tsg.y + 15), color(255, 244, 200), z(1.45)]);
+  add([sprite("post"), pos(beamX, tsg.y + 12), anchor("center"), z(2.3)]); add([sprite("post"), pos(beamX, tsg.y + 88), anchor("center"), z(2.3)]);
+  add([text("^", { size: 8 }), pos(beamX, tsg.y + 96), anchor("center"), color(242, 208, 92), z(2.3)]);
+  add([rect(pit.w + 4, pit.h + 4), pos(pit.x - 2, pit.y - 2), color(...BT.rim), z(0.5)]);
+  netFloor(pit.x, pit.y, pit.w, pit.h);
+  add([sprite("ladder"), pos(pit.x + 4, pit.y + 2), anchor("topleft"), z(2.2)]);
+  add([rect(14, 24), pos(pit.x + 2, pit.y + 2), area(), "ladderzone"]);
+  let falling = false;
+  player.onUpdate(() => {
+    if (falling || dialogOpen || window.__frozen) return;
+    const feet = player.pos.add(11, 26);
+    const onNet = feet.y > tsg.y + 15 && feet.y < tsg.y + 85 && feet.x > tsg.x && feet.x < tsg.x + 44;
+    if (onNet && Math.abs(feet.x - beamX) > 6) {
+      falling = true; window.__frozen = true; music.sfx("back");
+      player.use(rotate(0)); player.use(scale(1));
+      const wob = player.onUpdate(() => { player.angle = Math.sin(time() * 30) * 12; player.scale = vec2(Math.max(0.6, player.scale.x - 1.2 * dt())); });
+      wait(0.45, () => {
+        wob.cancel(); player.angle = 0; player.scale = vec2(1);
+        player.pos = vec2(pit.x + pit.w / 2 - 11, pit.y + pit.h / 2 - 18);
+        music.sfx("bang"); shake(6);
+        window.__frozen = false; falling = false;
+        if (!found.fell) { found.fell = true; say(["* You wobbled. You fell. The net went BOING.", "* No harm done. There's a ladder back up."]); }
+      });
+    }
+  });
+  player.onCollide("ladderzone", () => {
+    if (dialogOpen || falling) return;
+    music.sfx("move");
+    player.pos = vec2(tsg.x + 11, tsg.y + 86);
+  });
+
+  // ---- encounters, one per bend, in order, staged as acts
   CAVE_ENEMIES.forEach((name, i) => {
-    if (i < state.cave) return;
     const sg = segs[i >= 2 ? i + 2 : i + 1];
-    const e = add([sprite(name), pos(sg.x + 22, sg.y + 50), anchor("center"), z(5), area({ shape: new Rect(vec2(-22, -20), 44, 40) }), "enc"]);
+    // the stages stay even after the act is over
+    if (i === 3) { if (i < state.cave) trapeze(sg.x + 22, sg.y + 2, 1.2, 18); }
+    else if (i === 2) { /* the unicycle rides off with its rider */ }
+    else if (i === 4) { /* the beam is the stage */ }
+    else add([sprite("podium"), pos(sg.x + 8, sg.y + 56), anchor("topleft"), z(4)]);
+    if (i < state.cave) return;
+    // kaboom 3000 applies the anchor offset to a Rect shape itself, so a centered object takes a Rect at (0, 0)
+    const shape = i === 3 ? new Rect(vec2(0, 0), 44, 14) : new Rect(vec2(0, 0), 44, 40);
+    const e = add([sprite(name), pos(sg.x + 22, i === 3 ? sg.y + 58 : sg.y + 50), anchor("center"), z(5), area({ shape }), "enc"]);
     e.enemyIndex = i; e.enemyName = name;
     const by = sg.y + 50;
-    e.onUpdate(() => { e.pos.y = by + Math.sin(time() * 3 + i) * 2; });
+    if (i === 2) {
+      // the unicycle act: rides back and forth across the aisle
+      const uni = add([sprite("unicycle"), pos(sg.x + 22, by + 6), anchor("top"), z(4.9)]);
+      e.onUpdate(() => { e.pos.x = sg.x + 22 + Math.sin(time() * 1.3) * 14; e.pos.y = by - 8 + Math.abs(Math.sin(time() * 6)) * -2; uni.pos = vec2(e.pos.x, by + 2); uni.angle = Math.cos(time() * 1.3) * 8; });
+    } else if (i === 3) {
+      // the trapeze act: hangs above the aisle and drops when you pass under
+      const tp = trapeze(sg.x + 22, sg.y + 2, 1.2, 18);
+      e.hidden = true; // the trigger under the trapeze; the visible act hangs from the bar
+      const spr = add([sprite(name), pos(sg.x + 22, sg.y + 40), anchor("center"), z(5.1)]);
+      e.drop = spr;
+      spr.onUpdate(() => { if (e.dropping) return; const a = tp.angle * Math.PI / 180; spr.pos = vec2(sg.x + 22 + Math.sin(a) * 38, sg.y + 2 + Math.cos(a) * 38); });
+    } else if (i === 4) {
+      e.onUpdate(() => { e.pos.y = by + Math.sin(time() * 3 + i) * 2; e.pos.x = sg.x + 22 + Math.sin(time() * 5) * 1; });
+    } else {
+      e.onUpdate(() => { e.pos.y = by - 6 + Math.sin(time() * 3 + i) * 2; });
+    }
   });
   player.onCollide("enc", (e) => {
     if (dialogOpen) return;
     player.pos.y += 12;
     if (e.enemyIndex !== state.cave) return;
+    if (e.drop && !e.dropping) {
+      e.dropping = true; window.__frozen = true; music.sfx("bang");
+      const spr = e.drop, from = spr.pos.clone(), to = vec2(e.pos.x, e.pos.y - 6);
+      tween(0, 1, 0.45, (v) => { spr.pos = from.lerp(to, v).add(0, -Math.sin(v * Math.PI) * 10); }, easings.easeInQuad).then(() => {
+        shake(5); window.__frozen = false;
+        say(ENEMIES[e.enemyName].meet, () => go("battle", e.enemyName));
+      });
+      return;
+    }
     say(ENEMIES[e.enemyName].meet, () => go("battle", e.enemyName));
   });
 
   // the fork itself: a one-time signpost
   add([rect(44, 10), pos(bs.x, corrY + 8), area(), "forkzone"]);
+  add([sprite("banner"), pos(bs.x - 14, corrY - 18), anchor("topleft"), z(2.2)]);
+  add([sprite("banner2"), pos(bs.x + 46, corrY - 18), anchor("topleft"), z(2.2)]);
   player.onCollide("forkzone", () => {
     if (dialogOpen || state.branchSeen) return;
     state.branchSeen = true;
-    say(["* The tunnel forks. A passage goes left, and one goes right.", "* One of them smells like cotton candy. The other smells like trouble.", "* You can't tell which is which."]);
+    say(["* The aisle forks. A curtained passage goes left, and one goes right.", "* One of them smells like cotton candy. The other smells like trouble.", "* You can't tell which is which."]);
   });
 
-  // Bugon guards the way to the chamber once the six are down
+  // ---- Bugon guards the curtain to the ring once the six are down
+  const g8 = segs[8], cA = Math.min(g8.x, top.x), cB = Math.max(g8.x, top.x) + 44;
+  add([rect(cB - cA + 56, 8), pos(cA - 28, g8.y - 22), color(242, 208, 92), outline(1, rgb(27, 26, 46)), z(12)]);
+  add([sprite("curtain"), pos(cA - 24, g8.y - 20), anchor("topleft"), z(12)]);
+  add([sprite("curtain", { flipX: true }), pos(cB - 4, g8.y - 20), anchor("topleft"), z(12)]);
   if (state.cave >= CAVE_ENEMIES.length && !state.beatBugon) {
-    const sg = segs[8];
-    const b = add([sprite("bugon"), pos(sg.x + 22, sg.y + 40), anchor("center"), z(5), area({ shape: new Rect(vec2(-24, -22), 48, 44) }), "bugonzone"]);
-    b.onUpdate(() => { b.pos.y = sg.y + 40 + Math.abs(Math.sin(time() * 4)) * -3; });
+    const b = add([sprite("bugon"), pos(g8.x + 22, g8.y + 40), anchor("center"), z(5), area({ shape: new Rect(vec2(0, 0), 48, 44) }), "bugonzone"]);
+    b.onUpdate(() => { b.pos.y = g8.y + 40 + Math.abs(Math.sin(time() * 4)) * -3; });
     player.onCollide("bugonzone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.bugon.meet, () => go("battle", "bugon")); });
   }
-  // Lygon waits at the top of the tunnel once Bugon is gone; no door, just him
+  // ---- Lygon waits in the ring under the spotlight once Bugon is gone; no door, just him
   if (state.beatBugon) {
-    const top = segs[segs.length - 1];
-    const spot = add([rect(70, 40), pos(top.x - 13, 6), color(199, 123, 214), opacity(0.15), z(0)]);
-    spot.onUpdate(() => { spot.opacity = 0.1 + 0.12 * Math.abs(Math.sin(time() * 3)); });
-    const ly = add([sprite("lygon"), pos(top.x + 22, 30), anchor("center"), z(5), area({ shape: new Rect(vec2(-22, -22), 44, 44) }), "lygonzone"]);
+    const spot = add([circle(34), pos(ringC.x, ringC.y - 8), color(255, 240, 200), opacity(0.2), z(3)]);
+    spot.onUpdate(() => { spot.opacity = 0.14 + 0.1 * Math.abs(Math.sin(time() * 3)); });
+    const ly = add([sprite("lygon"), pos(top.x + 22, 30), anchor("center"), z(5), area({ shape: new Rect(vec2(0, 0), 44, 44) }), "lygonzone"]);
     ly.onUpdate(() => { ly.pos.y = 30 + Math.sin(time() * 2) * 2; });
     player.onCollide("lygonzone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.lygon.meet, () => go("battle", "lygon")); });
   }
 
-  // the very bottom of the tunnel is the way out
+  // the very bottom of the aisle is the way out
   add([rect(60, 16), pos(start.x - 8, CAVE_H - 18), area(), "caveexit"]);
   player.onCollide("caveexit", () => { if (!dialogOpen) go("town"); });
 
@@ -802,27 +1107,30 @@ scene("cave", (opts = {}) => {
   hud();
   const fights = CAVE_ENEMIES.length - state.cave;
   wait(0.3, () => say(state.cave === 0
-    ? ["* It's dark. It smells like wet rock and cotton candy.", "* Something is chittering up ahead."]
-    : state.beatBugon ? ["* The way to the top is open. He's up there. So are they."]
-    : [`* ${fights} of the clown's critters left between you and the big-eared one.`]));
+    ? ["* Inside the big top. Sawdust, popcorn, and a lot of confetti.", "* Something is chittering up the aisle."]
+    : state.beatBugon ? ["* The curtain to the ring is open. He's up there. So are they."]
+    : [`* ${fights} of the clown's acts left between you and the big-eared one.`]));
 });
 
-// ---------------------------------------------------------------- scene: side room
+// ---------------------------------------------------------------- scene: side room (dressing rooms)
 // Off the fork. One side holds a present, the other an ambush; which is which is rolled per run.
 scene("sideroom", (opts = {}) => {
   resetCam();
   music.play("cave");
   window.__frozen = false;
   const side = opts.side || "left";
-  const entryRight = side === "left"; // walking off the left edge of the tunnel puts you on this room's right edge
-  add([rect(W, H), pos(0, 0), color(38, 32, 54)]);
-  for (let i = 0; i < 90; i++) add([rect(rand(2, 5), rand(2, 4)), pos(rand(0, W), rand(0, H)), color(52, 44, 72)]);
+  const entryRight = side === "left"; // walking off the left edge of the aisle puts you on this room's right edge
+  tentCanvas(W, H);
   const room = { x: 60, y: 50, w: 200, h: 140 };
-  add([rect(room.w, room.h), pos(room.x, room.y), color(86, 74, 104), z(1)]);
+  // a boarded floor with a lit rim
+  add([rect(room.w + 4, room.h + 4), pos(room.x - 2, room.y - 2), color(...BT.rim), z(0.5)]);
+  add([rect(room.w, room.h), pos(room.x, room.y), color(...BT.boards), z(1)]);
+  for (let y = room.y + 10; y < room.y + room.h; y += 10) add([rect(room.w, 1), pos(room.x, y), color(...BT.boardLine), z(1.1)]);
+  for (let i = 0; i < 40; i++) add([rect(rand(3, 8), 1), pos(room.x + rand(0, room.w - 8), room.y + rand(0, room.h - 1)), color(...BT.boardLine), z(1.1)]);
   const doorY = room.y + room.h / 2 - 13, doorH = 26;
   // the way you came in: a short corridor to the screen edge
-  if (entryRight) add([rect(W - (room.x + room.w), doorH), pos(room.x + room.w, doorY), color(96, 84, 112), z(1)]);
-  else add([rect(room.x, doorH), pos(0, doorY), color(96, 84, 112), z(1)]);
+  if (entryRight) sawdust(room.x + room.w, doorY, W - (room.x + room.w), doorH);
+  else sawdust(0, doorY, room.x, doorH);
   // walls: around the room except the corridor gap, plus corridor sides
   wall(0, 0, W, room.y); wall(0, room.y + room.h, W, H - (room.y + room.h));
   if (entryRight) {
@@ -836,25 +1144,35 @@ scene("sideroom", (opts = {}) => {
     wall(0, doorY + doorH, room.x, room.y + room.h - (doorY + doorH));
     add([rect(6, doorH), pos(0, doorY), area(), "back"]);
   }
-  for (const [tx, ty] of [[room.x + 8, room.y + 8], [room.x + room.w - 12, room.y + 8]]) {
-    const t = add([rect(3, 6), pos(tx, ty), color(255, 160, 64), z(2)]);
-    t.onUpdate(() => { t.color = rgb(255, 130 + rand(0, 60), 40); });
-  }
+  // dressing room: mirrors with bulbs along the back wall, racks in the corners, lights
+  stringLights(20, 40, W - 40);
+  [room.x + 30, room.x + room.w / 2 - 9, room.x + room.w - 48].forEach((mx, k) => {
+    add([sprite("mirror"), pos(mx, room.y + 2), anchor("topleft"), z(2)]);
+    for (let b = 0; b < 4; b++) {
+      const bulb = add([rect(2, 2), pos(mx - 3 + b * 7, room.y + 1), color(255, 250, 230), opacity(1), z(2.2)]);
+      bulb.onUpdate(() => { bulb.opacity = 0.5 + 0.5 * Math.abs(Math.sin(time() * 4 + b + k)); });
+    }
+  });
+  add([sprite("rack"), pos(room.x + 6, room.y + room.h - 32), anchor("topleft"), z(7)]);
+  add([sprite("rack"), pos(room.x + room.w - 40, room.y + room.h - 32), anchor("topleft"), z(7)]);
+  confettiRain(20);
 
   const px = entryRight ? W - 40 : 18, py = doorY - 14;
   const player = makePlayer(px, py);
   wireTalk(player); wireMenu();
+  dustAtFeet(player);
   player.onCollide("back", () => { if (!dialogOpen && !window.__frozen) go("cave", { resume: true, at: "branch" }); });
 
   const cx = room.x + room.w / 2, cy = room.y + room.h / 2;
   if (side === state.branchSide) {
-    // the present: a Giant Sword
+    // the present: a Giant Sword, sitting on the vanity
+    add([sprite("vanity"), pos(cx - 15, cy - 2), anchor("topleft"), z(7)]);
     if (!state.giantSword) {
       const pr = add([sprite("present"), pos(cx - 8, cy - 8), anchor("topleft"), area(), body({ isStatic: true }), z(8), "npc", "present2"]);
       const sp = add([text("*", { size: 8 }), pos(cx, cy - 16), anchor("center"), color(242, 208, 92), z(9)]);
       sp.onUpdate(() => { sp.hidden = Math.floor(time() * 4) % 3 === 0; sp.pos.x = cx + Math.sin(time() * 5) * 10; });
       pr.talk = () => {
-        say(["* A present. Down here. With a bow on it.", "* You tear off the paper.", "* ..."], () => {
+        say(["* A present. On the vanity. With a bow on it.", "* You tear off the paper.", "* ..."], () => {
           destroy(pr); destroy(sp); state.giantSword = true; music.sfx("pickup"); save("cave"); player.use(sprite("hero_giant"));
           const sw = add([sprite("sword"), pos(player.pos.x + 11, player.pos.y - 30), anchor("center"), scale(2), z(60)]);
           sw.onUpdate(() => { sw.pos.y -= 6 * dt(); sw.angle = Math.sin(time() * 6) * 5; });
@@ -864,16 +1182,19 @@ scene("sideroom", (opts = {}) => {
           wait(1.4, () => { destroy(sw); say([`* ${state.name} got the GIANT SWORD!`, "* It is much, much bigger than the other sword.", "* Slash now hits a LOT harder."]); });
         });
       };
-      wait(0.3, () => say(["* A small room. It smells like cotton candy.", "* Something in the middle is sparkling."]));
-    } else wait(0.3, () => say(["* The room where you found the Giant Sword. Just torn wrapping paper now."]));
+      wait(0.3, () => say(["* A dressing room. Wigs, noses, one enormous shoe.", "* Something on the vanity is sparkling."]));
+    } else wait(0.3, () => say(["* The dressing room where you found the Giant Sword. Just torn wrapping paper now."]));
   } else {
-    // the ambush: it sees you first and walks straight at you
+    // the ambush: it was hiding behind the costume rack, and it saw you first
     if (!state.branchDone) {
       const far = entryRight ? room.x + 30 : room.x + room.w - 30;
-      const foe = add([sprite(state.branchEnemy), pos(far, cy), anchor("center"), z(6), "ambusher"]);
-      let sprung = false;
+      const rackX = entryRight ? room.x + 6 : room.x + room.w - 40;
+      add([sprite("rack"), pos(rackX, cy - 34), anchor("topleft"), z(7)]);
+      const foe = add([sprite(state.branchEnemy), pos(far, cy - 22), anchor("center"), z(6), "ambusher"]);
+      let sprung = false, out = false;
       foe.onUpdate(() => {
-        if (!sprung) { foe.pos.y = cy + Math.sin(time() * 3) * 2; return; }
+        if (!sprung) { foe.pos.y = cy - 22 + Math.sin(time() * 3) * 2; return; }
+        if (!out) return;
         const target = player.pos.add(11, 16);
         const d = target.sub(foe.pos);
         if (d.len() > 26) foe.pos = foe.pos.add(d.unit().scale(70 * dt()));
@@ -882,8 +1203,13 @@ scene("sideroom", (opts = {}) => {
           say(["* It saw you first. It's already moving.", "* There's nowhere to go but through it."], () => go("battle", "ambush"));
         }
       });
-      wait(0.6, () => { sprung = true; window.__frozen = true; music.play("danger"); music.sfx("bang"); });
-    } else wait(0.3, () => say(["* The room where that thing jumped you. Empty now.", "* Still smells like trouble."]));
+      wait(0.6, () => {
+        sprung = true; window.__frozen = true; music.play("danger"); music.sfx("bang");
+        // it jumps out from behind the rack
+        const from = foe.pos.clone(), to = vec2(far, cy + 4);
+        tween(0, 1, 0.3, (v) => { foe.pos = from.lerp(to, v).add(0, -Math.sin(v * Math.PI) * 16); }).then(() => { out = true; });
+      });
+    } else wait(0.3, () => say(["* The dressing room where that thing jumped you. Empty now.", "* Still smells like trouble."]));
   }
   hud();
 });
@@ -901,7 +1227,7 @@ scene("sideroom", (opts = {}) => {
 //   zones:    sweet zones per timing sweep.   fakeouts: fake twitches in a WAIT.   double: chance of two attacks.
 const ENEMIES = {
   chompo: {
-    name: "CHOMPO", spr: "chompo", hp: 16, weak: "ice", bg: [30, 50, 60], band: [40, 70, 80],
+    name: "CHOMPO", spr: "chompo", hp: 16, weak: "ice", bg: [74, 36, 46], band: [128, 52, 56], tent: true,
     meet: ["* A pink toad with far too many teeth hops into the path.", "CHOMPO: chomp?"],
     intro: ["* CHOMPO wants to bite something!"],
     attacks: [{ t: "chomped at %n!", d: [2, 4] }, { t: "licked its own eye.", d: [0, 0] }],
@@ -909,7 +1235,7 @@ const ENEMIES = {
     mini: { attack: "mash", defend: ["mashB"], speed: 1.0, zone: 0.3 },
   },
   zagg: {
-    name: "ZAGG", spr: "zagg", hp: 20, weak: "fire", bg: [30, 40, 70], band: [40, 55, 95],
+    name: "ZAGG", spr: "zagg", hp: 20, weak: "fire", bg: [66, 34, 52], band: [118, 50, 70], tent: true,
     meet: ["* A blue thing with one enormous eye and a zigzag grin blocks the way.", "ZAGG: zzzzZZAGG."],
     intro: ["* ZAGG is grinning. It has a LOT of grin."],
     attacks: [{ t: "grinned at %n! It's very unsettling.", d: [2, 5] }, { t: "blinked. Slowly.", d: [0, 0] }],
@@ -917,7 +1243,7 @@ const ENEMIES = {
     mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "timing" }, defend: ["block"], speed: 1.0, zone: 0.3 },
   },
   skitter: {
-    name: "SKITTER", spr: "skitter", hp: 22, weak: "ice", bg: [50, 35, 60], band: [70, 50, 85],
+    name: "SKITTER", spr: "skitter", hp: 22, weak: "ice", bg: [72, 38, 44], band: [132, 60, 52], tent: true,
     meet: ["* Something low and clicky scuttles out of the dark, headlamp swinging.", "SKITTER: bzzt. INTRUDER."],
     intro: ["* SKITTER's headlamp is pointed right at you!"],
     attacks: [{ t: "zapped %n with its headlamp!", d: [3, 5] }, { t: "scuttled in a circle.", d: [0, 0] }],
@@ -925,7 +1251,7 @@ const ENEMIES = {
     mini: { attack: "timing", defend: ["block"], speed: 1.2, zone: 0.3 },
   },
   wibblo: {
-    name: "WIBBLO", spr: "wibblo", hp: 24, weak: "fire", bg: [60, 30, 60], band: [85, 45, 85],
+    name: "WIBBLO", spr: "wibblo", hp: 24, weak: "fire", bg: [78, 34, 50], band: [138, 52, 66], tent: true,
     meet: ["* A pink blob with three eyes and two wiggly antennae drifts down.", "WIBBLO: wibble wibble."],
     intro: ["* WIBBLO's antennae are wiggling menacingly!"],
     attacks: [{ t: "bonked %n with an antenna!", d: [3, 6] }, { t: "wibbled.", d: [0, 0] }],
@@ -933,7 +1259,7 @@ const ENEMIES = {
     mini: { attack: "timing", defend: ["wait"], speed: 1.0, zone: 0.3, fakeouts: 0 },
   },
   redstack: {
-    name: "REDSTACK", spr: "redstack", hp: 28, weak: "ice", bg: [70, 25, 30], band: [95, 40, 45],
+    name: "REDSTACK", spr: "redstack", hp: 28, weak: "ice", bg: [76, 30, 36], band: [140, 48, 46], tent: true,
     meet: ["* A tall red robot unfolds from the wall, segment by segment.", "REDSTACK: HALT. TICKETS PLEASE."],
     intro: ["* REDSTACK is stacking up!"],
     attacks: [{ t: "swung a claw at %n!", d: [3, 6] }, { t: "checked %n for a ticket. Found none.", d: [1, 3] }],
@@ -941,7 +1267,7 @@ const ENEMIES = {
     mini: { attack: "timing", zones: 2, defend: ["mashB", "wait"], pick: "cycle", speed: 1.0, zone: 0.28, fakeouts: 1 },
   },
   boxor: {
-    name: "BOXOR", spr: "boxor", hp: 36, weak: "fire", bg: [55, 30, 65], band: [80, 45, 90],
+    name: "BOXOR", spr: "boxor", hp: 36, weak: "fire", bg: [70, 32, 48], band: [126, 54, 62], tent: true,
     meet: ["* A huge boxy robot with one red eye fills the tunnel.", "BOXOR: I AM THE OPENING ACT."],
     intro: ["* BOXOR's red eye lit up!", "BOXOR: NO REFUNDS."],
     attacks: [{ t: "fired an eye beam at %n!", d: [4, 7] }, { t: "stomped! The cave shook!", d: [3, 5] }, { t: "rebooted.", d: [0, 0] }],
@@ -949,7 +1275,7 @@ const ENEMIES = {
     mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], speed: 1.1, zone: 0.3, fakeouts: 2 },
   },
   bugon: {
-    name: "BUGON", spr: "bugon", hp: 45, weak: "ice", bg: [60, 30, 90], band: [90, 50, 130],
+    name: "BUGON", spr: "bugon", hp: 45, weak: "ice", bg: [64, 30, 50], band: [124, 50, 78], tent: true,
     meet: ["* The thing guarding the inner door has ears like two dinner plates.", "BUGON: FLAP FLAP FLAP!!", `* ${state.name} tightened the grip on the sword.`],
     intro: ["* BUGON flapped out in front of you!", "* Its ears are making a lot of wind."],
     attacks: [
@@ -962,7 +1288,7 @@ const ENEMIES = {
     mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["mashB", "block", "wait"], pick: "random", speed: 1.2, zone: 0.28, fakeouts: 1, double: 0.3 },
   },
   lygon: {
-    name: "LYGON", spr: "lygon", hp: 80, weak: "fire", bg: [90, 30, 40], band: [130, 50, 60],
+    name: "LYGON", spr: "lygon", hp: 80, weak: "fire", bg: [84, 30, 40], band: [160, 58, 56], tent: true,
     meet: ["* The chamber is lit like a circus ring. Two cages hang from the ceiling.", `${state.sis}: ${state.name}!!`, `${state.bro}: ${state.name}!!!`, "LYGON: Aaaand here's our volunteer! Hee hee hee!", `* ${state.name} did not buy a ticket.`],
     intro: ["* LYGON stepped into the spotlight!", "LYGON: Hee hee hee. Let's give them a SHOW!"],
     attacks: [
@@ -1214,6 +1540,7 @@ scene("battle", (which) => {
       mini: { ...(base.mini || {}), speed: ((base.mini && base.mini.speed) || 1) * 1.2 },
       next: () => { state.branchDone = true; state.hp = Math.min(state.maxHp, state.hp + 10); state.pp = Math.min(state.maxPp, state.pp + 6); go("cave", { resume: true, at: "branch" }); } };
   }
+  if (def.tent) tentBackdrop(); // the big top's canvas and ring floor under everything else
   music.sfx("battle_start");
   music.play(def.small ? "battle" : "boss");
   const boss = { name: def.name, hp: def.hp, maxHp: def.hp, frozen: 0 };
