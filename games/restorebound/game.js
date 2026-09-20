@@ -31,7 +31,7 @@ const START = {
   cave: 0, beatBugon: false, party: [], branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
   beatLygon: false, hollow: 0, beatMalva: false,
   // after Lygon: the walk home, the trouble next door, the King, the friends
-  homeAgain: false, kingFled: false, friends: false, partyHp: {}, rockets: 3,
+  homeAgain: false, kingFled: false, friends: false, partyHp: {}, rockets: 3, seenMess: false, seenHome: false,
   // the pantry, and the summit after the Hollow: Yugrin runs off with the orb
   soda: 2, bombs: 0, yugrinHasOrb: false, beatYugrin: false,
 };
@@ -56,7 +56,7 @@ function migrate(saved) {
   st.cave = Math.min(Math.max(0, st.cave | 0), CAVE_ENEMIES.length);
   st.hollow = Math.min(Math.max(0, st.hollow | 0), HOLLOW_ORDER.length);
   st.beatLygon = !!st.beatLygon; st.beatMalva = !!st.beatMalva;
-  st.homeAgain = !!st.homeAgain; st.kingFled = !!st.kingFled; st.friends = !!st.friends;
+  st.homeAgain = !!st.homeAgain; st.kingFled = !!st.kingFled; st.friends = !!st.friends; st.seenMess = !!st.seenMess; st.seenHome = !!st.seenHome;
   st.party = Array.isArray(st.party) ? st.party.filter((n) => PARTY_NAMES.includes(n)) : [];
   st.partyHp = st.partyHp && typeof st.partyHp === "object" ? { ...st.partyHp } : {};
   st.rockets = Math.max(0, st.rockets | 0);
@@ -537,8 +537,8 @@ scene("upstairs", () => {
   hud();
 
   // the explosion, then the windows start flashing purple
-  if (state.boomed) stormFlashes(windows);
-  else {
+  if (state.boomed && !state.beatLygon) stormFlashes(windows);
+  else if (!state.boomed) {
     wait(0.4, () => say(["* It's late. The house is quiet.", "* Too quiet, actually. Even the crickets stopped."], () => {
       wait(0.8, () => {
         shake(30); music.sfx("boom");
@@ -639,7 +639,7 @@ scene("downstairs", (opts) => {
   wall(0, H - 8, W / 2 - 22, 8); wall(W / 2 + 22, H - 8, W / 2 - 22, 8);
   const windows = [{ x: 100, y: 8, w: 30, h: 22 }, { x: W - 110, y: 8, w: 30, h: 22 }];
   windows.forEach(drawWindow);
-  stormFlashes(windows);
+  if (!state.beatLygon) stormFlashes(windows); // the storm on the hill ends with Lygon
   // the front door, sealed purple until you have the key
   add([rect(44, 8), pos(W / 2 - 22, H - 8), color(60, 40, 20)]);
   add([rect(4, 4), pos(W / 2 + 12, H - 7), color(242, 208, 92)]);
@@ -721,8 +721,8 @@ scene("downstairs", (opts) => {
   });
 
   if (reunion) reunionScene(player, fol, mom, dad);
-  else if (state.homeAgain) wait(0.3, () => say(state.kingFled ? ["* Home. Everyone is talking about the King."] : ["* Home. Through the wall: SHOUTING, from next door."]));
-  else wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is glowing purple. Mom and Dad are both talking at once."]));
+  else if (state.homeAgain) { if (!state.seenHome) { state.seenHome = true; wait(0.3, () => say(state.kingFled ? ["* Home. Everyone is talking about the King."] : ["* Home. Through the wall: SHOUTING, from next door."])); } }
+  else if (!state.seenMess) { state.seenMess = true; wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is glowing purple. Mom and Dad are both talking at once."])); }
 });
 
 // The reunion, at home. Mom and Dad run over, everyone hugs, the siblings go up to bed;
