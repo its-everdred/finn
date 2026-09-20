@@ -89,6 +89,57 @@ function say(lines, onDone) {
   }
 }
 
+// ---------------------------------------------------------------- pause menu (B outside battle)
+
+// Cookie / Juice from anywhere in the overworld. Uses the dialog lock so the player
+// stands still and NPCs stay quiet while it is open.
+function openMenu() {
+  if (dialogOpen) return;
+  dialogOpen = true;
+  music.sfx("select");
+  let idx = 0;
+  const rows = () => [
+    { label: `Cookie  x${state.cookies}   (+15 HP)`, use: () => {
+      if (state.cookies <= 0) return flash("No cookies left!");
+      const heal = Math.min(state.maxHp - state.hp, 15);
+      if (heal <= 0) return flash("HP is already full.");
+      state.cookies -= 1; state.hp += heal; music.sfx("heal"); flash(`+${heal} HP. Mmm.`);
+    } },
+    { label: `Juice   x${state.juice}   (full HP)`, use: () => {
+      if (state.juice <= 0) return flash("No juice left!");
+      const heal = state.maxHp - state.hp;
+      if (heal <= 0) return flash("HP is already full.");
+      state.juice -= 1; state.hp = state.maxHp; music.sfx("heal"); flash(`+${heal} HP. Full health!`);
+    } },
+    { label: "Close", use: close },
+  ];
+  add([rect(W - 16, 76, { radius: 3 }), pos(8, H - 84), color(20, 20, 36), outline(2, rgb(232, 232, 240)), fixed(), z(100), "menu"]);
+  const head = add([text("", { size: 8 }), pos(18, H - 76), color(242, 208, 92), fixed(), z(101), "menu"]);
+  const lines = [0, 1, 2].map((i) => add([text("", { size: 8 }), pos(30, H - 62 + i * 13), color(232, 232, 240), fixed(), z(101), "menu"]));
+  const cur = add([text(">", { size: 8 }), pos(18, H - 62), color(242, 208, 92), fixed(), z(101), "menu"]);
+  const note = add([text("", { size: 8 }), pos(W - 18, H - 76), anchor("topright"), color(207, 207, 216), fixed(), z(101), "menu"]);
+  let noteUntil = 0;
+  function flash(t) { note.text = t; noteUntil = time() + 1.6; }
+  head.onUpdate(() => {
+    head.text = `${state.name}   HP ${state.hp}/${state.maxHp}   PP ${state.pp}/${state.maxPp}`;
+    rows().forEach((r, i) => { lines[i].text = r.label; lines[i].color = i === idx ? rgb(242, 208, 92) : rgb(232, 232, 240); });
+    cur.pos.y = H - 62 + idx * 13;
+    if (time() > noteUntil) note.text = "";
+  });
+  const hs = [];
+  ["up", "w", "8"].forEach((k) => hs.push(onKeyPress(k, () => { idx = (idx + 2) % 3; music.sfx("move"); })));
+  ["down", "s", "2"].forEach((k) => hs.push(onKeyPress(k, () => { idx = (idx + 1) % 3; music.sfx("move"); })));
+  INTERACT.forEach((k) => hs.push(onKeyPress(k, () => rows()[idx].use())));
+  BACK.forEach((k) => hs.push(onKeyPress(k, close)));
+  function close() {
+    hs.forEach((h) => h.cancel()); destroyAll("menu"); dialogOpen = false; music.sfx("back");
+  }
+}
+function wireMenu() {
+  // opened on the next frame so the B press that opens it is not also read as "close"
+  BACK.forEach((k) => onKeyPress(k, () => { if (!dialogOpen) wait(0, openMenu); }));
+}
+
 // ---------------------------------------------------------------- overworld helpers
 
 function makePlayer(x, y) {
@@ -358,6 +409,7 @@ scene("upstairs", () => {
     : [`* ${state.dog} is under your bed. Only the tail is out.`, "* The tail says: no."]), { footY: 6 });
 
   wireTalk(player);
+  wireMenu();
   hud();
 
   // the explosion, then the windows start flashing purple
@@ -515,6 +567,7 @@ scene("downstairs", () => {
   npc("dog", 120, 200, "dog", () => say([`* ${state.dog} is sitting in front of the door, staring at it.`, `* ${state.dog} looks at you, then at the door, then at you.`, "* Woof."]), { footY: 6 });
 
   wireTalk(player);
+  wireMenu();
   hud();
 
   player.onCollide("stairsup", () => { if (!dialogOpen) go("upstairs"); });
@@ -595,6 +648,7 @@ scene("town", () => {
   dog.onUpdate(() => { dogT += dt(); dog.pos.x = 200 + Math.sin(dogT * 0.7) * 14; });
 
   wireTalk(player);
+  wireMenu();
   hud();
 
   wait(0.3, () => say(state.cave > 0
@@ -677,6 +731,7 @@ scene("cave", (opts = {}) => {
   }
   const player = makePlayer(sx, sy);
   player.onUpdate(() => { camPos(W / 2, Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16))); });
+  wireMenu();
 
   // encounters, one per bend, in order
   CAVE_ENEMIES.forEach((name, i) => {
@@ -769,6 +824,7 @@ scene("sideroom", (opts = {}) => {
 
   const px = entryRight ? W - 40 : 18, py = doorY - 14;
   const player = makePlayer(px, py);
+  wireTalk(player); wireMenu();
   player.onCollide("back", () => { if (!dialogOpen && !window.__frozen) go("cave", { resume: true, at: "branch" }); });
 
   const cx = room.x + room.w / 2, cy = room.y + room.h / 2;
