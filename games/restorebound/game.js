@@ -2007,7 +2007,7 @@ const ENEMIES = {
     intro: ["* CHOMPO wants to bite something!"],
     attacks: [{ t: "chomped at %n!", d: [2, 4] }, { t: "licked its own eye.", d: [0, 0] }],
     win: ["* CHOMPO burped and hopped away."], small: true,
-    mini: { attack: "mash", defend: ["mashB"], speed: 1.0, zone: 0.3 },
+    mini: { attack: "mash", defend: ["mashB", "block"], pick: "cycle", speed: 1.0, zone: 0.3 },
   },
   zagg: {
     name: "ZAGG", spr: "zagg", hp: 20, weak: "fire", bg: [66, 34, 52], band: [118, 50, 70], tent: true,
@@ -2023,7 +2023,7 @@ const ENEMIES = {
     intro: ["* SKITTER's headlamp is pointed right at you!"],
     attacks: [{ t: "zapped %n with its headlamp!", d: [3, 5] }, { t: "scuttled in a circle.", d: [0, 0] }],
     win: ["* SKITTER's little legs gave out. It rolled away."], small: true,
-    mini: { attack: "timing", defend: ["block"], speed: 1.2, zone: 0.3 },
+    mini: { attack: "wait-line", defend: ["block"], speed: 1.2, zone: 0.3 },
   },
   wibblo: {
     name: "WIBBLO", spr: "wibblo", hp: 24, weak: "fire", bg: [78, 34, 50], band: [138, 52, 66], tent: true,
@@ -2039,7 +2039,7 @@ const ENEMIES = {
     intro: ["* REDSTACK is stacking up!"],
     attacks: [{ t: "swung a claw at %n!", d: [3, 6] }, { t: "checked %n for a ticket. Found none.", d: [1, 3] }],
     win: ["* REDSTACK toppled over one segment at a time. Clonk. Clonk. Clonk."], small: true,
-    mini: { attack: "timing", zones: 2, defend: ["mashB", "wait"], pick: "cycle", speed: 1.0, zone: 0.28, fakeouts: 1 },
+    mini: { attack: "wait-line", zones: 2, defend: ["mashB", "wait"], pick: "cycle", speed: 1.0, zone: 0.28, fakeouts: 1 },
   },
   boxor: {
     name: "BOXOR", spr: "boxor", hp: 36, weak: "fire", bg: [70, 32, 48], band: [126, 54, 62], tent: true,
@@ -2047,7 +2047,7 @@ const ENEMIES = {
     intro: ["* BOXOR's red eye lit up!", "BOXOR: NO REFUNDS."],
     attacks: [{ t: "fired an eye beam at %n!", d: [4, 7] }, { t: "stomped! The cave shook!", d: [3, 5] }, { t: "rebooted.", d: [0, 0] }],
     win: ["* BOXOR's eye flickered out.", "BOXOR: ...intermission."], small: true,
-    mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], speed: 1.1, zone: 0.3, fakeouts: 2 },
+    mini: { attack: { slash: "timing", fire: "pulse", ice: "pulse", star: "sequence" }, defend: ["wait", "catch"], pick: "cycle", speed: 1.1, zone: 0.3, fakeouts: 2 },
   },
   bugon: {
     name: "BUGON", spr: "bugon", hp: 45, weak: "ice", bg: [64, 30, 50], band: [124, 50, 78], tent: true,
@@ -2060,7 +2060,7 @@ const ENEMIES = {
     ],
     win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open.", "* Something rolled out of Bugon's ear. A BOMB!"],
     next: () => { state.beatBugon = true; state.bombs += 1; fullHeal(); go("cave", { resume: true }); },
-    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["mashB", "block", "wait"], pick: "random", speed: 1.2, zone: 0.28, fakeouts: 1, double: 0.3 },
+    mini: { attack: { slash: "mash-wait-mash", fire: "wait-both", ice: "wait-both", star: "sequence" }, defend: ["mashB", "block", "wait", "catch"], pick: "random", speed: 1.2, zone: 0.28, fakeouts: 1, double: 0.3 },
   },
   lygon: {
     name: "LYGON", spr: "lygon", hp: 80, weak: "fire", bg: [84, 30, 40], band: [160, 58, 56], tent: true,
@@ -2081,8 +2081,8 @@ const ENEMIES = {
     ],
     next: () => { state.beatLygon = true; state.party = ["sis", "bro"]; fullHeal(); save("cave"); go("cave", { resume: true }); },
     mini: {
-      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.26, pick: "phase",
-      phases: [{ above: 0.66, defend: "block" }, { above: 0.33, defend: "wait", fakeouts: 2 }, { above: 0, defend: "mashB", flurry: true }],
+      attack: { slash: "mash-wait-mash", fire: "pulse", ice: "pulse", star: "sequence" }, speed: 1.3, zone: 0.26, pick: "phase",
+      phases: [{ above: 0.66, defend: "wait-line", zones: 2 }, { above: 0.33, defend: ["wait", "catch"], fakeouts: 2 }, { above: 0, defend: "mashB", flurry: true }],
     },
   },
 
@@ -2102,7 +2102,7 @@ const ENEMIES = {
     intro: ["* SKREEK circled overhead, then folded its wings!"],
     attacks: [{ t: "swooped at %n from above!", d: [4, 7] }, { t: "screeched right in %n's ear!", d: [3, 5] }, { t: "hung upside down and thought about it.", d: [0, 0] }],
     win: ["* SKREEK tumbled out of the air and landed in a heap of apron.", "Baker: I... I'm Rosa. I run the bakery. Why am I on the CEILING.", "Baker: Thank you. Oh, thank you. Come by the shop. Everything's free. Forever.", "* She ran off, still a little bit flapping."], small: true,
-    mini: { attack: "timing", defend: ["wait"], fakeouts: 1, speed: 1.25, zone: 0.28 },
+    mini: { attack: "catch", defend: ["wait"], fakeouts: 1, speed: 1.25, zone: 0.28 },
   },
   thud: {
     name: "THUD", spr: "stomper2", hp: 38, weak: "fire", bg: [28, 12, 36], band: [50, 26, 60], zone: "hollow",
@@ -2110,7 +2110,7 @@ const ENEMIES = {
     intro: ["* THUD raised two fists like hams!"],
     attacks: [{ t: "brought both fists down on %n!", d: [5, 8] }, { t: "belly-bumped %n across the hall!", d: [4, 7] }, { t: "sneezed purple smoke. Everywhere.", d: [1, 2] }],
     win: ["* THUD wobbled, sat, and blinked. His eyes went back to brown.", "Butcher: Dell. I'm Dell. I've got a shop. I've got... kids. What day is it?", "Butcher: You're a good egg. Thank you. I've got to get HOME.", "* He ran off, holding his smock up like a skirt."], small: true,
-    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "timing" }, defend: ["mashB", "block"], pick: "cycle", blockZones: 2, speed: 1.3, zone: 0.27 },
+    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "timing" }, defend: ["mashB", "hold"], pick: "cycle", blockZones: 2, speed: 1.3, zone: 0.27 },
   },
   flitz: {
     name: "FLITZ", spr: "swooper2", hp: 42, weak: "ice", bg: [20, 8, 44], band: [40, 20, 72], zone: "hollow",
@@ -2118,7 +2118,7 @@ const ENEMIES = {
     intro: ["* FLITZ is darting all over the place!"],
     attacks: [{ t: "dive-bombed %n!", d: [5, 8] }, { t: "threw a piece of chalk at %n! Hard!", d: [3, 6] }, { t: "corrected %n's posture.", d: [2, 3] }],
     win: ["* FLITZ skidded to a stop in mid-air and dropped, glasses first.", "Teacher: Ms. Abernathy. Fourth grade. I was... grading. Then the purple.", "Teacher: You've been very brave, young man. Extra credit. For life.", "* She ran off, straightening her glasses."], small: true,
-    mini: { attack: "timing", zones: 2, defend: ["wait"], fakeouts: 2, speed: 1.4, zone: 0.26 },
+    mini: { attack: "dodge", zones: 2, defend: ["wait", "dodge"], pick: "cycle", fakeouts: 2, speed: 1.4, zone: 0.26 },
   },
   grumbo: {
     name: "GRUMBO", spr: "stomper3", hp: 45, weak: "ice", bg: [30, 10, 30], band: [54, 22, 54], zone: "hollow",
@@ -2126,7 +2126,7 @@ const ENEMIES = {
     intro: ["* GRUMBO cracked his knuckles! It echoed!"],
     attacks: [{ t: "hurled a chunk of floor at %n!", d: [5, 9] }, { t: "headbutted %n!", d: [4, 8] }, { t: "shook the chains off the ceiling! CLANG!", d: [3, 6] }],
     win: ["* GRUMBO went down like a hay bale.", "Farmer: ...Walt. Walt Dobbs. My cows. Who's been milking my cows?!", "Farmer: You saved me, kid. Anything you need. Milk. Eggs. A tractor.", "* He ran off, yelling about cows."], small: true,
-    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["block", "mashB"], pick: "random", blockZones: 2, speed: 1.45, zone: 0.26, double: 0.25 },
+    mini: { attack: { slash: "mash", fire: "hold", ice: "hold", star: "sequence" }, defend: ["block", "mashB", "hold"], pick: "random", blockZones: 2, speed: 1.45, zone: 0.26, double: 0.25 },
   },
   batty: {
     name: "BATTY", spr: "swooper3", hp: 48, weak: "fire", bg: [18, 6, 40], band: [36, 16, 70], zone: "hollow",
@@ -2134,7 +2134,7 @@ const ENEMIES = {
     intro: ["* BATTY dropped from the ceiling! It swoops! It fakes! It swoops again!"],
     attacks: [{ t: "swooped down and raked %n!", d: [6, 9] }, { t: "bit %n! Ow!", d: [5, 8] }, { t: "said 'this won't hurt a bit'. It hurt a bit.", d: [3, 5] }],
     win: ["* BATTY flapped once, twice, and dropped into a sitting position.", "Doctor: Dr. Okafor. I'm the town doctor. I remember... a purple light in my window...", "Doctor: Thank you. Truly. Now go finish this. She's right through that door.", "* The doctor ran off. Behind you, the seal on the door went dark."], small: true,
-    mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], fakeouts: 3, speed: 1.5, zone: 0.25 },
+    mini: { attack: { slash: "wait-both", fire: "pulse", ice: "pulse", star: "sequence" }, defend: ["wait", "catch"], pick: "cycle", fakeouts: 3, speed: 1.5, zone: 0.25 },
   },
   // -------- the trouble house. Two neighbours the King raised; fought together, then never again.
   fenn: {
@@ -2185,16 +2185,16 @@ const ENEMIES = {
     win: ["* MALAGORE is defeated."],
     next: () => { state.beatMalva = true; go("summit"); },
     mini: {
-      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.24, pick: "phase",
+      attack: { slash: "mash-wait-mash", fire: "pulse", ice: "pulse", star: "simon" }, speed: 1.3, zone: 0.24, pick: "phase",
       // five forms; each one is a sprite, a speed, and its own defenses. The hit that crosses a line plays the swap.
       phases: [
         { above: 0.8, spr: "malva", defend: "block", zones: 2, speed: 1.3 },
-        { above: 0.6, spr: "malagore2", defend: ["wait", "block"], fakeouts: 2, zones: 2, speed: 1.3, enter: ["* The crown falls off! MALAGORE: You want to see me? SEE ME."],
+        { above: 0.6, spr: "malagore2", defend: ["wait", "wait-line"], fakeouts: 2, zones: 2, speed: 1.3, enter: ["* The crown falls off! MALAGORE: You want to see me? SEE ME."],
           attacks: [{ t: "lashed %n with a nose tentacle!", d: [6, 10] }, { t: "wrapped two nose tentacles around %n and squeezed!", d: [5, 9] }, { t: "hissed through every tentacle at once!", d: [4, 7] }] },
-        { above: 0.4, spr: "malagore3", defend: "mashB", double: 0.5, speed: 1.4, enter: ["* MALAGORE is falling apart!"] },
-        { above: 0.2, spr: "malagore4", defend: ["wait", "block"], fakeouts: 3, zones: 2, zone: 0.15, speed: 1.4, enter: ["* MALAGORE is becoming a SPIRIT!"],
+        { above: 0.4, spr: "malagore3", defend: ["mashB", "hold"], double: 0.5, speed: 1.4, enter: ["* MALAGORE is falling apart!"] },
+        { above: 0.2, spr: "malagore4", defend: ["wait", "pulse"], fakeouts: 3, zones: 2, zone: 0.15, speed: 1.4, enter: ["* MALAGORE is becoming a SPIRIT!"],
           attacks: [{ t: "swept straight through %n! The cold went right to the bones!", d: [6, 10] }, { t: "passed through %n like a draft under a door!", d: [5, 8] }, { t: "howled. The orb howled with her.", d: [4, 7] }] },
-        { above: 0, spr: "malagore5", defend: ["mashB", "block"], flurry: "alt", double: 0.5, zones: 2, speed: 1.5, enter: ["MALAGORE: Enough. Face me as I AM."], banner: "THE ORB FLARES!!" },
+        { above: 0, spr: "malagore5", defend: ["mashB", "wait-both"], flurry: "alt", double: 0.5, zones: 2, speed: 1.5, enter: ["MALAGORE: Enough. Face me as I AM."], banner: "THE ORB FLARES!!" },
       ],
     },
   },
@@ -2212,12 +2212,12 @@ const ENEMIES = {
     win: ["* YUGRIN dropped the staff.", "YUGRIN: ...no. NO. It was MINE. It was supposed to be MINE."],
     next: () => { window.rbOrbShatter && window.rbOrbShatter(() => { state.beatYugrin = true; save("summit"); go("end"); }); },
     mini: {
-      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.24, pick: "phase",
+      attack: { slash: "mash-wait-mash", fire: "wait-both", ice: "wait-both", star: "simon" }, speed: 1.3, zone: 0.24, pick: "phase",
       phases: [
-        { above: 0.66, tier: 1, defend: "wait", fakeouts: 1, speed: 1.3 },
-        { above: 0.33, tier: 2, defend: "block", zones: 2, double: 0.34, speed: 1.4, enter: ["YUGRIN: The orb... it BURNS."], banner: "THE ORB RAKES THE SKY!",
+        { above: 0.66, tier: 1, defend: ["wait", "dodge"], fakeouts: 1, speed: 1.3 },
+        { above: 0.33, tier: 2, defend: ["block", "catch"], zones: 2, double: 0.34, speed: 1.4, enter: ["YUGRIN: The orb... it BURNS."], banner: "THE ORB RAKES THE SKY!",
           attacks: [{ t: "raked the summit with a beam from the orb! %n was in it!", d: [7, 11] }, { t: "swung the sword through the beam at %n!", d: [6, 10] }, { t: "made the orb scream at %n!", d: [5, 9] }] },
-        { above: 0, tier: 3, defend: "mashB", flurry: true, speed: 1.5, enter: ["YUGRIN: I AM THE ORB NOW."],
+        { above: 0, tier: 3, defend: ["mashB", "hold"], flurry: true, speed: 1.5, enter: ["YUGRIN: I AM THE ORB NOW."],
           attacks: [{ t: "cracked the sky open over %n!", d: [8, 12] }, { t: "called lightning down on %n!", d: [7, 11] }, { t: "swung the sword and the orb together at %n!", d: [7, 11] }] },
       ],
     },
@@ -2264,9 +2264,9 @@ function miniStrobe(tag = MINI) {
   return r;
 }
 // a big round button next to the prompt: gold on your turn, blue on theirs. Reads without words.
-function miniButton(col, x = 34, y = 163) {
+function miniButton(col, x = 34, y = 163, glyph = "A") {
   const c = add([circle(11), pos(x, y), color(...col), outline(2, rgb(20, 20, 36)), z(30), MINI, "minibtn"]);
-  const a = add([text("A", { size: 12 }), pos(x, y + 1), anchor("center"), color(20, 20, 36), z(31), MINI]);
+  const a = add([text(glyph, { size: glyph.length > 1 ? 9 : 12 }), pos(x, y + 1), anchor("center"), color(20, 20, 36), z(31), MINI]);
   a.onUpdate(() => { a.scale = vec2(1 + 0.15 * Math.abs(Math.sin(time() * 8))); });
   return [c, a];
 }
@@ -2292,28 +2292,56 @@ function gradeLabel(g) { return g === "perfect" ? "PERFECT!" : g === "good" ? "G
 
 // READY: announces the mechanic before it starts, so a player coming off a WAIT turn is not
 // caught flat-footed by a MASH. The button acts it out: rapid pulses for mash, single crisp
-// taps for timing, dimmed with dots for wait. 0.8 s, then the real thing.
+// taps for timing, dimmed with dots for wait, pressed flat for hold, a cross for the arrow games.
+// Each kind has a word and a thumbnail of what is about to move. 0.8 s, then the real thing.
+const CUES = {
+  mash: { label: "MASH!", btn: "mash" },
+  sequence: { label: "TAP x3", btn: "tap", preview: "bars" },
+  timing: { label: "WAIT!", btn: "tap", preview: "bars" },
+  "wait-bars": { label: "WAIT!", btn: "tap", preview: "bars" },
+  wait: { label: "WAIT...", btn: "wait" },
+  "wait-line": { label: "LINE!", btn: "tap", preview: "line" },
+  "wait-both": { label: "MEET!", btn: "tap", preview: "both" },
+  "mash-wait-mash": { label: "MASH WAIT MASH", btn: "mash", preview: "mwm" },
+  pulse: { label: "PULSE!", btn: "tap", preview: "pulse" },
+  catch: { label: "CATCH!", btn: "tap", preview: "catch" },
+  simon: { label: "COPY ME!", btn: "arrows", preview: "simon" },
+  hold: { label: "HOLD!", btn: "hold", preview: "hold" },
+  dodge: { label: "ARROWS!", btn: "arrows", preview: "dodge" },
+};
 function miniCue(kind, col, then) {
-  const tag = "minicue", t0 = time();
-  const label = kind === "mash" ? "MASH!" : kind === "sequence" ? "TAP x3" : kind === "wait" ? "WAIT..." : "WAIT!";
+  const tag = "minicue", t0 = time(), cue = CUES[kind] || CUES.timing;
   add([rect(210, 42, { radius: 4 }), pos(W / 2, 176), anchor("center"), color(20, 20, 36), outline(2, rgb(...col)), z(32), tag]);
-  const mash = kind === "mash", ccol = mash ? C_MASH : col;
-  const txt = add([text(label, { size: 18 }), pos(W / 2 + 10, 172), anchor("center"), color(...ccol), opacity(1), z(33), tag]);
+  const mash = cue.btn === "mash", ccol = mash ? C_MASH : col;
+  const txt = add([text(cue.label, { size: cue.label.length > 8 ? 12 : 18 }), pos(W / 2 + 10, cue.preview ? 169 : 172), anchor("center"), color(...ccol), opacity(1), z(33), tag]);
   const btn = add([circle(12), pos(W / 2 - 74, 176), color(...ccol), outline(2, rgb(20, 20, 36)), opacity(1), z(33), tag]);
   if (mash) miniStrobe(tag);
-  if (kind === "wait") miniStop(W / 2 - 74, 176, tag);
-  const a = add([text("A", { size: 13 }), pos(W / 2 - 74, 177), anchor("center"), color(20, 20, 36), opacity(1), z(34), tag]);
+  if (cue.btn === "wait") miniStop(W / 2 - 74, 176, tag);
+  const a = add([text(cue.btn === "arrows" ? "+" : "A", { size: cue.btn === "arrows" ? 16 : 13 }), pos(W / 2 - 74, 177), anchor("center"), color(20, 20, 36), opacity(1), z(34), tag]);
   btn.onUpdate(() => {
     const t = time() - t0;
-    if (kind === "mash") { const sc = 1 + 0.35 * Math.abs(Math.sin(t * 22)); btn.scale = vec2(sc); a.scale = vec2(sc); txt.color = Math.sin(t * 30) > 0 ? rgb(...C_MASH) : rgb(255, 255, 255); }
-    else if (kind === "wait") { btn.hidden = true; a.hidden = true; txt.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t * 4)); }
+    if (cue.btn === "mash") { const sc = 1 + 0.35 * Math.abs(Math.sin(t * 22)); btn.scale = vec2(sc); a.scale = vec2(sc); txt.color = Math.sin(t * 30) > 0 ? rgb(...C_MASH) : rgb(255, 255, 255); }
+    else if (cue.btn === "wait") { btn.hidden = true; a.hidden = true; txt.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t * 4)); }
+    else if (cue.btn === "hold") { const sc = t % 0.8 < 0.6 ? 0.8 : 1.1; btn.scale = vec2(sc); a.scale = vec2(sc); }
+    else if (cue.btn === "arrows") { a.angle = t % 0.5 < 0.25 ? 0 : 90; }
     else { const sc = t % 0.4 < 0.12 ? 1.4 : 1; btn.scale = vec2(sc); a.scale = vec2(sc); }
   });
-  if (kind === "timing" || kind === "sequence") {
-    // a tiny preview: the marker parked inside the zone
-    add([rect(64, 5), pos(W / 2 + 32, 190), color(...C_GREY), z(33), tag]);
-    add([rect(18, 5), pos(W / 2 + 55, 190), color(...col), z(34), tag]);
-    add([rect(2, 9), pos(W / 2 + 63, 188), color(...C_INK), z(35), tag]);
+  // the thumbnail: a 64x5 track at (W/2+32, 190) with the bits that will move
+  const px = W / 2 + 32, py = 190;
+  const track = () => add([rect(64, 5), pos(px, py), color(...C_GREY), z(33), tag]);
+  const zone = (x, w, c) => add([rect(w, 5), pos(px + x, py), color(...(c || col)), z(34), tag]);
+  const line = (x) => add([rect(2, 9), pos(px + x, py - 2), color(...C_INK), z(35), tag]);
+  const glyph = (s, x, size = 8, c = col) => add([text(s, { size }), pos(px + x, py + 2), anchor("center"), color(...c), z(35), tag]);
+  switch (cue.preview) {
+    case "bars": track(); zone(23, 18); line(31); break;
+    case "line": track(); zone(8, 14); zone(42, 14); line(48); glyph("<", 70, 7, C_INK); break;
+    case "both": track(); zone(23, 18); line(31); glyph(">", -6, 7); glyph("<", 70, 7, C_INK); break;
+    case "mwm": zone(0, 18, C_MASH); zone(23, 18, C_RED); zone(46, 18, C_MASH); glyph("STOP", 32, 5, [255, 255, 255]); break;
+    case "pulse": add([circle(6), pos(px + 32, py + 2), color(20, 20, 36), outline(1, rgb(...C_INK)), z(34), tag]); add([circle(4), pos(px + 32, py + 2), color(...col), z(35), tag]); break;
+    case "catch": track(); add([circle(3), pos(px + 32, py - 6), color(...col), z(35), tag]); break;
+    case "simon": glyph("<  ^  >", 32, 9); break;
+    case "hold": track(); zone(40, 15, C_GREEN); zone(0, 40); break;
+    case "dodge": glyph("<", 8, 12); glyph(">", 56, 12); break;
   }
   music.sfx("move");
   wait(0.8, () => { destroyAll(tag); then(); });
@@ -2480,6 +2508,296 @@ function miniWait(o, done) {
     wait(0.4, () => finish(early ? "early" : "miss"));
   });
 }
+
+// ---------------------------------------------------------------- more minigames
+// Shared bits. Direction keys mirror the overworld: arrows, WASD, numpad.
+const DIR_KEYS = { left: ["left", "a", "4"], right: ["right", "d", "6"], up: ["up", "w", "8"], down: ["down", "s", "2"] };
+const DIR_GLYPH = { left: "<", right: ">", up: "^", down: "v" };
+const DIRS4 = ["left", "right", "up", "down"];
+const grade3 = (d, bw) => (d <= bw / 4 ? "perfect" : d <= bw / 2 ? "good" : null);
+// a red X where the wrong press happened
+function miniX(x, y) {
+  music.sfx("back");
+  add([text("X", { size: 14 }), pos(x, y), anchor("center"), color(...C_RED), z(31), opacity(1), lifespan(0.6, { fade: 0.3 }), move(UP, 20), MINI]);
+}
+// the WAIT... / NOW! prompt with its stop sign and button; set(true) flips to NOW!
+function miniWaitPrompt(col, pre, x = W / 2) {
+  const prompt = miniPrompt(pre + "WAIT...", x, 163, 14, col); const btn = miniButton(col); const stop = miniStop();
+  btn.forEach((b) => b.hidden = true);
+  let now = false;
+  return { prompt, set(v) { if (v === now) return; now = v; prompt.text = pre + (v ? "NOW!" : "WAIT..."); prompt.textSize = v ? 18 : 14; btn.forEach((b) => b.hidden = !v); stop.forEach((b) => b.hidden = v); } };
+}
+function miniEnd(res, done) { destroyAll(MINI); miniResult(gradeLabel(res)); wait(0.45, () => done(res)); }
+// a forgiving press counter: X twice, the third wrong press is the miss
+function miniMisses(onThird) { let n = 0; return (x, y) => { n += 1; miniX(x, y); if (n >= 3) onThird(); }; }
+
+// WAIT-LINE: the target bars stand still; a line races right→left over them. Press while the line is inside a bar.
+function miniWaitLine(o, done) {
+  const speed = o.speed || 1, bw = o.zone || 0.3, n = Math.max(1, o.zones || 1), col = o.hot || C_GOLD, pre = o.prefix ? o.prefix + " " : "";
+  const dur = 0.75 / speed, passes = 2, ARM = 0.3;
+  const centres = n === 1 ? [0.5] : n === 2 ? [0.3, 0.7] : [0.2, 0.5, 0.8];
+  miniTrack();
+  centres.forEach((c) => { miniZone(c - bw / 2, c + bw / 2, [44, 92, 60], 27); miniZone(c - bw / 4, c + bw / 4, col, 28, "minizone"); });
+  const line = miniMarker();
+  const wp = miniWaitPrompt(col, pre);
+  let t = -ARM, over = false;
+  const frac = () => { const k = Math.max(0, t) / dur; return 1 - (k - Math.floor(k)); };
+  const nearest = () => Math.min(...centres.map((c) => Math.abs(frac() - c)));
+  line.onUpdate(() => { t += dt(); line.pos.x = TRACK.x + frac() * TRACK.w - 1; wp.set(t >= 0 && nearest() <= bw / 2); });
+  function finish(res) { if (over) return; over = true; off(); timer.cancel(); miniEnd(res, done); }
+  const wrong = miniMisses(() => finish("miss"));
+  const off = miniKeys(o.keys || INTERACT, () => {
+    if (t < 0 || over) return;
+    const g = grade3(nearest(), bw);
+    if (g) { music.sfx("select"); finish(g); } else wrong(line.pos.x, TRACK.y - 12);
+  });
+  const timer = wait(ARM + dur * passes + 0.1, () => finish("miss"));
+}
+
+// WAIT-BOTH: the line runs right→left, the bar runs left→right; press when they cross.
+function miniWaitBoth(o, done) {
+  const speed = o.speed || 1, bw = o.zone || 0.3, col = o.hot || C_GOLD, pre = o.prefix ? o.prefix + " " : "";
+  const dur = 0.9 / speed, bdur = dur * 1.35, passes = 3, ARM = 0.3;
+  miniTrack();
+  const bar = add([rect(bw * TRACK.w, TRACK.h - 2), pos(0, TRACK.y + 1), anchor("top"), color(...col), z(28), MINI, "minizone"]);
+  const line = miniMarker();
+  add([text("<", { size: 8 }), pos(TRACK.x + TRACK.w + 6, TRACK.y - 8), anchor("center"), color(...C_INK), z(29), MINI]);
+  add([text(">", { size: 8 }), pos(TRACK.x - 6, TRACK.y - 8), anchor("center"), color(...col), z(29), MINI]);
+  const wp = miniWaitPrompt(col, pre);
+  let t = -ARM, over = false;
+  const lf = () => { const k = Math.max(0, t) / dur; return 1 - (k - Math.floor(k)); };
+  const bc = () => { const k = Math.max(0, t) / bdur, f = k - Math.floor(k); return -bw / 2 + f * (1 + bw); };
+  const dist = () => Math.abs(lf() - bc());
+  line.onUpdate(() => {
+    t += dt();
+    line.pos.x = TRACK.x + lf() * TRACK.w - 1;
+    // the bar is clipped to the track as it slides in and out
+    const l = Math.max(0, bc() - bw / 2), r = Math.min(1, bc() + bw / 2);
+    bar.width = Math.max(1, (r - l) * TRACK.w); bar.pos.x = TRACK.x + (l + r) / 2 * TRACK.w;
+    wp.set(t >= 0 && r > l && dist() <= bw / 2);
+  });
+  function finish(res) { if (over) return; over = true; off(); timer.cancel(); miniEnd(res, done); }
+  const wrong = miniMisses(() => finish("miss"));
+  const off = miniKeys(o.keys || INTERACT, () => {
+    if (t < 0 || over) return;
+    const g = grade3(dist(), bw);
+    if (g) { music.sfx("select"); finish(g); } else wrong(line.pos.x, TRACK.y - 12);
+  });
+  const timer = wait(ARM + dur * passes + 0.1, () => finish("miss"));
+}
+
+// MASH-WAIT-MASH: three beats. Mash for 0.9 s, then hands off until NOW!, then mash again.
+// Resolves with the mean of the three (0..1) so it slots in where a mash ratio goes.
+function miniMashWaitMash(o, done) {
+  const speed = o.speed || 1, col = o.hot || C_GOLD, keys = o.keys || INTERACT, pre = o.prefix ? o.prefix + " " : "";
+  const scores = [];
+  const beatDots = () => [0, 1, 2].map((i) => add([circle(3), pos(TRACK.x + TRACK.w - 20 + i * 9, 154), color(...(i < scores.length ? col : C_GREY)), z(30), MINI]));
+  function mashBeat(next) {
+    const dur = 0.9 / speed, target = Math.round(6 * dur);
+    miniTrack(); beatDots();
+    const fill = add([rect(1, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...col), z(27), MINI]);
+    const clock = add([rect(TRACK.w - 2, 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), z(28), MINI]);
+    const mp = miniPrompt(pre + "MASH A!", W / 2 - 20, 163, 14, C_MASH); miniButton(C_MASH); miniStrobe();
+    mp.onUpdate(() => { mp.color = Math.sin(time() * 30) > 0 ? rgb(...C_MASH) : rgb(255, 255, 255); });
+    const counter = add([text("0", { size: 18 }), pos(W / 2 + 78, 163), anchor("center"), color(...C_INK), z(30), scale(1), MINI]);
+    let n = 0, t = 0, over = false;
+    const off = miniKeys(keys, () => { if (over) return; n += 1; music.sfx("select"); counter.text = `${n}`; counter.scale = vec2(1.8); fill.width = Math.max(1, (TRACK.w - 2) * Math.min(1, n / target)); });
+    counter.onUpdate(() => { t += dt(); counter.scale = vec2(Math.max(1, counter.scale.x - 5 * dt())); clock.width = (TRACK.w - 2) * Math.max(0, 1 - t / dur); });
+    wait(dur, () => { over = true; off(); scores.push(Math.min(1, n / target)); destroyAll(MINI); wait(0.15, next); });
+  }
+  function waitBeat(next) {
+    const windup = rand(0.6, 1.3) / speed;
+    miniTrack(); beatDots();
+    const pulse = add([rect(TRACK.w - 2, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), opacity(0.3), z(27), MINI]);
+    const wp = miniWaitPrompt(col, pre);
+    let t = 0, phase = "wait", over = false, early = 0;
+    pulse.onUpdate(() => { t += dt(); pulse.opacity = phase === "wait" ? 0.15 + 0.2 * Math.abs(Math.sin(t * 6)) : 0.95; });
+    function end(score) { if (over) return; over = true; off(); scores.push(score); destroyAll(MINI); wait(0.15, next); }
+    const off = miniKeys(keys, () => {
+      if (over) return;
+      if (phase === "wait") { early += 1; miniX(W / 2, TRACK.y - 12); if (early >= 3) end(0); return; }
+      music.sfx("select"); end(t - tNow <= 0.25 ? 1 : 0.5);
+    });
+    let tNow = 0;
+    wait(windup, () => { if (over) return; phase = "now"; tNow = t; wp.set(true); pulse.color = rgb(...col); music.sfx("slash"); wait(0.5, () => end(0)); });
+  }
+  mashBeat(() => waitBeat(() => mashBeat(() => {
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+    miniResult(gradeLabel(gradeOf(mean)));
+    wait(0.45, () => done(mean));
+  })));
+}
+
+// PULSE: a circle breathes in and out beside the prompt; press when it fills the ring.
+function miniPulse(o, done) {
+  const speed = o.speed || 1, col = o.hot || C_GOLD, pre = o.prefix ? o.prefix + " " : "";
+  const period = 1.1 / speed, ARM = 0.3, cycles = 3, R = 11, tol = 3.5;
+  const cx = W / 2 + 92, cy = 170;
+  add([circle(R), pos(cx, cy), color(20, 20, 36), outline(2, rgb(...C_INK)), z(27), MINI, "minizone"]);
+  const dot = add([circle(2), pos(cx, cy), color(...col), opacity(0.85), z(28), MINI, "minimarker"]);
+  const wp = miniWaitPrompt(col, pre, W / 2 - 20);
+  let t = -ARM, over = false;
+  const radius = () => 2 + 15 * (0.5 - 0.5 * Math.cos(2 * Math.PI * Math.max(0, t) / period));
+  const dist = () => Math.abs(radius() - R);
+  dot.onUpdate(() => { t += dt(); dot.radius = radius(); wp.set(t >= 0 && dist() <= tol); });
+  function finish(res) { if (over) return; over = true; off(); timer.cancel(); miniEnd(res, done); }
+  const wrong = miniMisses(() => finish("miss"));
+  const off = miniKeys(o.keys || INTERACT, () => {
+    if (t < 0 || over) return;
+    const d = dist();
+    if (d <= 1.5) { music.sfx("select"); finish("perfect"); } else if (d <= tol) { music.sfx("select"); finish("good"); } else wrong(cx, cy - 18);
+  });
+  const timer = wait(ARM + period * cycles + 0.1, () => finish("miss"));
+}
+
+// CATCH: a dot drops out of the sky; press the moment it lands on the track. Three drops, one catch.
+function miniCatch(o, done) {
+  const speed = o.speed || 1, col = o.hot || C_GOLD, pre = o.prefix ? o.prefix + " " : "";
+  const fall = 0.75 / speed, drops = 3, y0 = 128, yT = TRACK.y + TRACK.h / 2, tol = 7;
+  miniTrack();
+  miniZone(0, 1, [44, 92, 60], 27);
+  const wp = miniWaitPrompt(col, pre);
+  let i = 0, over = false, dot = null, t = 0;
+  function finish(res) { if (over) return; over = true; off(); guard.cancel(); miniEnd(res, done); }
+  const wrong = miniMisses(() => finish("miss"));
+  const dist = () => (dot ? Math.abs(dot.pos.y - yT) : 99);
+  function drop() {
+    if (over) return;
+    if (i >= drops) return finish("miss");
+    const x = TRACK.x + rand(0.15, 0.85) * TRACK.w;
+    t = i === 0 ? -0.3 : -0.1;
+    dot = add([circle(4), pos(x, y0), color(...col), outline(1, rgb(20, 20, 36)), z(30), MINI, "minimarker"]);
+    dot.onUpdate(() => {
+      t += dt();
+      const f = Math.max(0, t) / fall;
+      dot.pos.y = y0 + (yT + 14 - y0) * f * f;
+      wp.set(dist() <= tol);
+      if (dot.pos.y > yT + 12) { destroy(dot); dot = null; wp.set(false); i += 1; wait(0.1, drop); }
+    });
+  }
+  const off = miniKeys(o.keys || INTERACT, () => {
+    if (over || !dot || t < 0) return;
+    const d = dist();
+    if (d <= 3) { music.sfx("select"); finish("perfect"); } else if (d <= tol) { music.sfx("select"); finish("good"); } else wrong(dot.pos.x, dot.pos.y - 12);
+  });
+  const guard = wait(drops * (fall + 0.45) + 1, () => finish("miss"));
+  drop();
+}
+
+// SIMON: arrows show for a moment, then vanish; press them back in order. All right = perfect, some = good.
+function miniSimon(o, done) {
+  const speed = o.speed || 1, col = o.hot || C_GOLD, pre = o.prefix ? o.prefix + " " : "";
+  const n = o.count || 3, seq = []; for (let i = 0; i < n; i++) seq.push(choose(DIRS4));
+  const show = 1.1, limit = show + (1.0 + 0.6 * n) / speed;
+  miniTrack();
+  const prompt = miniPrompt(pre + "WATCH...", W / 2 - 40, 163, 14, col); const stop = miniStop(); const btn = miniButton(col, 34, 163, "+"); btn.forEach((b) => b.hidden = true);
+  const x0 = TRACK.x + TRACK.w / 2 - (n - 1) * 20;
+  const glyphs = seq.map((d, i) => add([text(DIR_GLYPH[d], { size: 12 }), pos(x0 + i * 40, TRACK.y + TRACK.h / 2 + 1), anchor("center"), color(...col), z(30), MINI]));
+  const clock = add([rect(TRACK.w - 2, 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), z(28), MINI]);
+  let phase = "show", k = 0, right = 0, over = false, t = 0;
+  clock.onUpdate(() => { t += dt(); if (phase === "repeat") clock.width = (TRACK.w - 2) * Math.max(0, 1 - (t - show) / (limit - show)); });
+  function finish() { if (over) return; over = true; offs.forEach((f) => f()); timer.cancel(); miniEnd(right >= n ? "perfect" : right > 0 ? "good" : "miss", done); }
+  const wrong = miniMisses(finish);
+  const offs = DIRS4.map((d) => miniKeys(DIR_KEYS[d], () => {
+    if (over || phase !== "repeat") return;
+    const g = glyphs[k];
+    if (d === seq[k]) { right += 1; music.sfx("select"); g.text = DIR_GLYPH[d]; g.color = rgb(...C_GREEN); g.scale = vec2(1.5); k += 1; if (k >= n) finish(); }
+    else wrong(g.pos.x, g.pos.y - 14);
+  }));
+  wait(show, () => {
+    if (over) return;
+    phase = "repeat"; glyphs.forEach((g) => { g.text = "?"; g.color = rgb(...C_GREY); });
+    prompt.text = pre + "COPY!"; prompt.textSize = 18; stop.forEach((b) => b.hidden = true); btn.forEach((b) => b.hidden = false); music.sfx("move");
+  });
+  const timer = wait(limit + 0.1, finish);
+}
+
+// HOLD: hold A and the bar fills; let go inside the green band. Past the end is too much.
+function miniHold(o, done) {
+  const speed = o.speed || 1, col = o.hot || C_GOLD, keys = o.keys || INTERACT, pre = o.prefix ? o.prefix + " " : "";
+  const full = 2.0 / speed, b0 = 0.62, b1 = 0.86, limit = 5 / speed;
+  miniTrack();
+  miniZone(b0, b1, [44, 92, 60], 27); miniZone(b0 + (b1 - b0) / 3, b1 - (b1 - b0) / 3, C_GREEN, 28, "minizone");
+  const fill = add([rect(1, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...col), z(29), MINI]);
+  const prompt = miniPrompt(pre + "HOLD A!", W / 2, 163, 14, col); const btn = miniButton(col);
+  let f = 0, holding = false, over = false, t = 0;
+  const down = () => keys.some((k) => isKeyDown(k));
+  function finish(res) { if (over) return; over = true; timer.cancel(); miniEnd(res, done); }
+  const wrong = miniMisses(() => finish("miss"));
+  fill.onUpdate(() => {
+    t += dt();
+    if (t < 0.1 || over) return;   // the first frames belong to the press that closed the menu
+    const d = down();
+    if (d) { holding = true; f = Math.min(1, f + dt() / full); fill.width = Math.max(1, (TRACK.w - 2) * f); btn.forEach((b) => b.scale = vec2(0.8)); }
+    const inBand = f >= b0 && f <= b1;
+    prompt.text = pre + (d ? (inBand ? "LET GO!" : "HOLD...") : "HOLD A!"); prompt.textSize = inBand && d ? 18 : 14;
+    if (d && f >= 1) { fill.color = rgb(...C_RED); add([text("TOO MUCH!", { size: 10 }), pos(W / 2, TRACK.y - 10), anchor("center"), color(...C_RED), z(31), MINI]); finish("miss"); return; }
+    if (!d && holding) {
+      holding = false; btn.forEach((b) => b.scale = vec2(1));
+      const mid = (b0 + b1) / 2, third = (b1 - b0) / 6;
+      if (Math.abs(f - mid) <= third) { music.sfx("select"); finish("perfect"); }
+      else if (inBand) { music.sfx("select"); finish("good"); }
+      else { wrong(TRACK.x + f * TRACK.w, TRACK.y - 12); f = 0; fill.width = 1; }
+    }
+  });
+  const timer = wait(limit, () => finish("miss"));
+}
+
+// DODGE: an arrow points left or right; press that way before the clock runs out. Two arrows.
+function miniDodge(o, done) {
+  const speed = o.speed || 1, col = o.hot || C_GOLD, pre = o.prefix ? o.prefix + " " : "";
+  const rounds = o.count || 2, limit = 1.3 / speed;
+  miniTrack();
+  const prompt = miniPrompt(pre + (o.hot ? "DODGE!" : "STRIKE!"), W / 2 - 30, 163, 14, col); miniButton(col, 34, 163, "<>");
+  const clock = add([rect(TRACK.w - 2, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), opacity(0.4), z(27), MINI]);
+  let i = 0, pts = 0, over = false, dir = null, t = 0, arrow = null, off = null;
+  function finish() { if (over) return; over = true; if (off) off(); guard.cancel(); miniEnd(pts >= rounds * 2 - 1 ? "perfect" : pts > 0 ? "good" : "miss", done); }
+  const wrong = miniMisses(finish);
+  function round() {
+    if (over) return;
+    if (i >= rounds) return finish();
+    dir = choose(["left", "right"]); t = i === 0 ? -0.3 : -0.1;
+    const a = add([text(DIR_GLYPH[dir], { size: 22 }), pos(dir === "left" ? TRACK.x + 30 : TRACK.x + TRACK.w - 30, TRACK.y + TRACK.h / 2 + 1), anchor("center"), color(...col), z(30), scale(1), MINI, "minimarker"]);
+    arrow = a;
+    a.onUpdate(() => {
+      if (arrow !== a) return; // this arrow has been answered; it only lingers to show its colour
+      t += dt(); a.scale = vec2(1 + 0.15 * Math.abs(Math.sin(time() * 10)));
+      clock.width = Math.max(1, (TRACK.w - 2) * Math.max(0, 1 - Math.max(0, t) / limit));
+      if (t >= limit) next(false);
+    });
+    const hs = ["left", "right"].map((d) => miniKeys(DIR_KEYS[d], () => {
+      if (over || t < 0) return;
+      if (d === dir) { music.sfx("select"); pts += t <= limit * 0.55 ? 2 : 1; arrow.color = rgb(...C_GREEN); next(true); }
+      else wrong(arrow.pos.x, arrow.pos.y - 16);
+    }));
+    off = () => hs.forEach((h) => h());
+  }
+  function next(hit) {
+    if (over) return;
+    off(); off = null;
+    const a = arrow; arrow = null;
+    if (!hit) a.color = rgb(...C_RED);
+    wait(0.15, () => { if (a.exists()) destroy(a); i += 1; round(); });
+  }
+  const guard = wait(rounds * (limit + 0.5) + 1, finish);
+  round();
+}
+
+// every minigame by name. run(o, done): o carries speed, zone, zones, keys, hot, prefix, fakeouts, spr;
+// done gets "perfect" | "good" | "miss", or 0..1 when `ratio` is set. mash / sequence / wait / block keep
+// their own branches in the battle scene (their damage maths predates this table).
+const MINIS = {
+  timing: { run: miniTiming },
+  "wait-bars": { run: miniTiming },
+  "wait-line": { run: miniWaitLine },
+  "wait-both": { run: miniWaitBoth },
+  "mash-wait-mash": { run: miniMashWaitMash, ratio: true },
+  pulse: { run: miniPulse },
+  catch: { run: miniCatch },
+  simon: { run: miniSimon },
+  hold: { run: miniHold },
+  dodge: { run: miniDodge },
+};
 
 // The battle is fought by a party: the hero first, then every friend who has joined. Each living
 // member acts in turn (its own little menu), then every living enemy acts, each picking a random
@@ -2738,7 +3056,12 @@ scene("battle", (which, bopts = {}) => {
     telegraph(`${label} ${o.verb || "ATTACKS!"}`, () => {
       if (kind === "mash") miniCue("mash", C_GOLD, () => miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r))));
       else if (kind === "sequence") miniCue("sequence", C_GOLD, () => miniSequence({ speed, zone: zoneW }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss")));
-      else miniCue("timing", C_GOLD, () => miniTiming({ prompt: "TAP A!", speed, zone: zoneW, zones: m.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
+      else {
+        // everything else comes from the table; an unknown name plays as timing
+        const M = MINIS[kind] || MINIS.timing, name = MINIS[kind] ? kind : "timing";
+        miniCue(name, C_GOLD, () => M.run({ speed, zone: zoneW, zones: m.zones || 1, keys: INTERACT }, (r) =>
+          M.ratio ? done(0.6 + r, gradeOf(r)) : done(r === "perfect" ? 1.5 : r === "good" ? 1 : 0.5, r)));
+      }
     }, C_GOLD);
   }
   // pick an enemy (left/right) when there is more than one to pick from
@@ -3113,8 +3436,11 @@ scene("battle", (which, bopts = {}) => {
       telegraph(`${f.name} ATTACKS!`, () =>
         miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: f.spr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
     } else {
+      // "block" is the timed bar; every other name comes from the table and plays in blue with B allowed
+      const name = MINIS[d.defend] ? d.defend : "timing", M = MINIS[name];
       telegraph(`${f.name} ATTACKS!`, () =>
-        miniCue("timing", C_BLUE, () => miniTiming({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: d.zone || f.mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
+        miniCue(name, C_BLUE, () => M.run({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: d.zone || f.mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE, fakeouts: d.fakeouts || 0, spr: f.spr }, (r) =>
+          M.ratio ? land(0.6 * r) : land(r === "perfect" ? 0.7 : r === "good" ? 0.4 : 0))));
     }
   }
 
