@@ -248,9 +248,9 @@ scene("upstairs", () => {
   // one window per room; they go purple once the explosion happens
   const windows = [{ x: 42, y: 8, w: 30, h: 22 }, { x: W - 72, y: 8, w: 30, h: 22 }];
   windows.forEach(drawWindow);
-  // your room: bed, desk
+  // your room: bed, desk (against the top wall, clear of the walk to the doorway)
   wall(20, 60, 60, 36, [70, 110, 190]); add([rect(22, 12), pos(24, 64), color(244, 241, 234)]);
-  wall(100, 120, 40, 24, [140, 100, 60]);
+  wall(96, 44, 44, 22, [140, 100, 60]); add([rect(14, 10), pos(100, 46), color(60, 80, 120)]); add([rect(10, 3), pos(120, 52), color(232, 232, 240)]);
   // siblings' room: brother's blue bed, sister's pink bed, rug, shelf
   wall(W / 2 + 14, 60, 50, 32, [90, 130, 210]); add([rect(18, 11), pos(W / 2 + 18, 64), color(244, 241, 234)]);
   wall(W - 72, 60, 58, 32, [230, 120, 160]); add([rect(18, 11), pos(W - 68, 64), color(244, 241, 234)]);
