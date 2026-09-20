@@ -257,6 +257,7 @@ scene("title", (opts = {}) => {
     const sp = rand(0.5, 1.5);
     s.onUpdate(() => { s.opacity = 0.4 + 0.6 * Math.abs(Math.sin(time() * sp + i)); });
   }
+  decorTitle();
   // purple storm
   const wash = add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0), z(1)]);
   const words = ["BOOM!", "BANG!", "KRAKOOM!", "BOOM!!"];
@@ -331,21 +332,22 @@ scene("upstairs", () => {
   music.play(state.kidnapped ? "danger" : "night");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
-  wall(0, 0, W, 40, [140, 170, 200]);
-  wall(0, 0, 8, H, [110, 80, 50]); wall(W - 8, 0, 8, H, [110, 80, 50]); wall(0, H - 8, W, 8, [110, 80, 50]);
-  wall(W / 2 - 4, 0, 8, 110, [110, 80, 50]);
-  wall(W / 2 - 4, 150, 8, H - 150, [110, 80, 50]);
+  decorUpstairs();
+  wall(0, 0, W, 40);
+  wall(0, 0, 8, H); wall(W - 8, 0, 8, H); wall(0, H - 8, W, 8);
+  wall(W / 2 - 4, 0, 8, 110);
+  wall(W / 2 - 4, 150, 8, H - 150);
   // one window per room; they go purple once the explosion happens
   const windows = [{ x: 42, y: 8, w: 30, h: 22 }, { x: W - 72, y: 8, w: 30, h: 22 }];
   windows.forEach(drawWindow);
   // your room: bed, desk (against the top wall, clear of the walk to the doorway)
-  wall(20, 60, 60, 36, [70, 110, 190]); add([rect(22, 12), pos(24, 64), color(244, 241, 234)]);
-  wall(96, 44, 44, 22, [140, 100, 60]); add([rect(14, 10), pos(100, 46), color(60, 80, 120)]); add([rect(10, 3), pos(120, 52), color(232, 232, 240)]);
+  wall(20, 60, 60, 36); add([rect(22, 12), pos(24, 64), color(244, 241, 234)]);
+  wall(96, 44, 44, 22); add([rect(14, 10), pos(100, 46), color(60, 80, 120)]); add([rect(10, 3), pos(120, 52), color(232, 232, 240)]);
   // siblings' room: brother's blue bed, sister's pink bed, rug, shelf
-  wall(W / 2 + 14, 60, 50, 32, [90, 130, 210]); add([rect(18, 11), pos(W / 2 + 18, 64), color(244, 241, 234)]);
-  wall(W - 72, 60, 58, 32, [230, 120, 160]); add([rect(18, 11), pos(W - 68, 64), color(244, 241, 234)]);
+  wall(W / 2 + 14, 60, 50, 32); add([rect(18, 11), pos(W / 2 + 18, 64), color(244, 241, 234)]);
+  wall(W - 72, 60, 58, 32); add([rect(18, 11), pos(W - 68, 64), color(244, 241, 234)]);
   add([rect(70, 40), pos(W / 2 + 30, 150), color(200, 140, 190)]);
-  wall(W - 70, 120, 54, 10, [140, 100, 60]);
+  wall(W - 70, 120, 54, 10);
   // stairs down
   add([rect(30, 28), pos(14, H - 36), color(110, 80, 50)]);
   for (let i = 0; i < 5; i++) add([rect(30, 1), pos(14, H - 34 + i * 5), color(70, 50, 30)]);
@@ -525,9 +527,10 @@ scene("downstairs", () => {
   music.play(state.kidnapped ? "danger" : "night");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
-  wall(0, 0, W, 40, [150, 190, 220]);
-  wall(0, 0, 8, H, [110, 80, 50]); wall(W - 8, 0, 8, H, [110, 80, 50]);
-  wall(0, H - 8, W / 2 - 22, 8, [110, 80, 50]); wall(W / 2 + 22, H - 8, W / 2 - 22, 8, [110, 80, 50]);
+  decorDownstairs();
+  wall(0, 0, W, 40);
+  wall(0, 0, 8, H); wall(W - 8, 0, 8, H);
+  wall(0, H - 8, W / 2 - 22, 8); wall(W / 2 + 22, H - 8, W / 2 - 22, 8);
   const windows = [{ x: 100, y: 8, w: 30, h: 22 }, { x: W - 110, y: 8, w: 30, h: 22 }];
   windows.forEach(drawWindow);
   stormFlashes(windows);
@@ -543,9 +546,9 @@ scene("downstairs", () => {
   add([text("^", { size: 8 }), pos(29, 72), anchor("center"), color(242, 208, 92)]);
   add([rect(30, 6), pos(14, 40), area(), "stairsup"]);
   // furniture
-  wall(60, 120, 60, 30, [140, 100, 60]); add([rect(56, 4), pos(62, 118), color(170, 130, 90)]);
-  wall(200, 70, 80, 30, [90, 110, 160]);
-  wall(W - 60, 130, 50, 30, [110, 110, 122]);
+  wall(60, 120, 60, 30); add([rect(56, 4), pos(62, 118), color(170, 130, 90)]);
+  wall(200, 70, 80, 30);
+  wall(W - 60, 130, 50, 30);
   // knocked-over things from the break-in
   add([rect(10, 10), pos(140, 180), color(60, 40, 20), rotate(35)]);
   add([rect(14, 4), pos(180, 200), color(200, 80, 90), rotate(-15)]);
@@ -612,6 +615,7 @@ scene("town", () => {
   for (let i = 0; i < 120; i++) add([rect(1, 2), pos(rand(0, W), rand(0, H)), color(70, 140, 80)]);
   add([rect(40, H), pos(W / 2 - 20, 0), color(214, 190, 140)]);
   add([rect(W, 34), pos(0, H - 48), color(214, 190, 140)]);
+  decorTown();
   wall(0, 0, 6, H); wall(W - 6, 0, 6, H); wall(0, H - 6, W, 6);
   // purple glow over the hill
   const glow = add([rect(W, 70), pos(0, 0), color(199, 123, 214), opacity(0.12), z(0)]);
