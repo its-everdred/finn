@@ -19,10 +19,10 @@ Object.entries(window.SPRITES).forEach(([k, rows]) => loadSprite(k, window.pixel
 // ---------------------------------------------------------------- game state
 
 const START = {
-  hasSword: false, kidnapped: false, talkedSis: false, talkedBro: false, talkedMom: false,
-  beatBugon: false, hp: 40, pp: 30, cookies: 3, juice: 1,
+  hasSword: false, kidnapped: false, boomed: false, hasKey: false, talkedSis: false, talkedBro: false, talkedMom: false, talkedDad: false,
+  cave: 0, beatBugon: false, hp: 40, pp: 30, cookies: 3, juice: 1,
 };
-const state = { name: "Finn", sis: "Lily", bro: "Max", cat1: "Pumpkin", cat2: "Smoke", maxHp: 40, maxPp: 30, ...START };
+const state = { name: "Finn", sis: "Lily", bro: "Max", dog: "Biscuit", maxHp: 40, maxPp: 30, ...START };
 
 // space is the main button; "/" is back. z and enter also confirm.
 const SAVE_KEY = "restorebound.save.v1";
@@ -37,6 +37,7 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /*
 window.restoreboundRestart = () => { clearSave(); Object.assign(state, START); go("title", { fresh: true }); };
 
 const INTERACT = ["space", "z", "enter"];
+onKeyPress("m", () => { const m = music.toggleMute(); const b = document.getElementById("mute"); if (b) b.textContent = m ? "Unmute (M)" : "Mute (M)"; });
 const BACK = ["/", "x", "escape"];
 
 // ---------------------------------------------------------------- dialog box
@@ -123,28 +124,43 @@ function wireTalk(player) {
   }));
 }
 
+function resetCam() { camPos(W / 2, H / 2); }
+
+// the cave is one tall map; the camera follows the player up it
+const CAVE_H = 1000;
+const CAVE_ENEMIES = ["chompo", "zagg", "skitter", "wibblo", "redstack", "boxor"];
+
 function hud() {
   const t = add([text("", { size: 8 }), pos(10, 6), color(232, 232, 240), z(50), fixed()]);
   t.onUpdate(() => { t.text = `${state.name}  HP ${state.hp}/${state.maxHp}  PP ${state.pp}/${state.maxPp}`; });
 }
 
 // purple lightning through a window: flashes + a rumble
-function stormFlashes(windowRect) {
-  const glow = add([rect(windowRect.w, windowRect.h), pos(windowRect.x, windowRect.y), color(199, 123, 214), opacity(0), z(3)]);
+function drawWindow(wn) {
+  add([rect(wn.w + 4, wn.h + 4), pos(wn.x - 2, wn.y - 2), color(20, 20, 36)]);
+  add([rect(wn.w, wn.h), pos(wn.x, wn.y), color(28, 22, 52)]);
+  add([rect(2, wn.h), pos(wn.x + wn.w / 2 - 1, wn.y), color(232, 232, 240), z(4)]);
+  add([rect(wn.w, 2), pos(wn.x, wn.y + wn.h / 2 - 1), color(232, 232, 240), z(4)]);
+}
+function stormFlashes(windows) {
+  const glows = windows.map((wn) => add([rect(wn.w, wn.h), pos(wn.x, wn.y), color(199, 123, 214), opacity(0), z(3)]));
   const wash = add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0), z(90), fixed()]);
+  const set = (g, w) => { glows.forEach((o) => o.opacity = g); wash.opacity = w; };
   function flash() {
-    glow.opacity = 0.9; wash.opacity = 0.35; shake(rand(4, 12));
-    wait(0.08, () => { glow.opacity = 0.4; wash.opacity = 0.12; });
-    wait(0.16, () => { glow.opacity = 0.0; wash.opacity = 0; });
-    if (Math.random() < 0.5) wait(0.25, () => { glow.opacity = 0.7; wash.opacity = 0.25; wait(0.08, () => { glow.opacity = 0; wash.opacity = 0; }); });
+    set(0.95, 0.35); shake(rand(4, 12));
+    wait(0.08, () => set(0.45, 0.12));
+    wait(0.16, () => set(0, 0));
+    if (Math.random() < 0.5) wait(0.25, () => { set(0.75, 0.25); wait(0.08, () => set(0, 0)); });
   }
-  loop(rand(1.2, 2.4), flash);
-  wait(0.3, flash);
+  loop(rand(1.1, 2.2), flash);
+  wait(0.2, flash);
 }
 
 // ---------------------------------------------------------------- scene: title + naming
 
 scene("title", (opts = {}) => {
+  resetCam();
+  music.play("home");
   const saved = opts.fresh ? null : loadSave();
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
   for (let i = 0; i < 40; i++) {
@@ -185,8 +201,7 @@ scene("title", (opts = {}) => {
     ["name", "What is YOUR name?"],
     ["bro", "Your little brother's name?"],
     ["sis", "Your little sister's name?"],
-    ["cat1", "Your first cat's name?"],
-    ["cat2", "Your second cat's name?"],
+    ["dog", "Your dog's name?"],
   ];
   let step = 0;
   const q = add([text(prompts[0][1], { size: 8 }), pos(W / 2, 112), anchor("center"), color(232, 232, 240), z(5)]);
@@ -205,12 +220,12 @@ scene("title", (opts = {}) => {
   });
   onKeyPress("backspace", () => { state[key()] = state[key()].slice(0, -1); nameTxt.text = state[key()]; });
   onKeyPress("enter", () => {
-    const defaults = { name: "Finn", bro: "Max", sis: "Lily", cat1: "Pumpkin", cat2: "Smoke" };
+    const defaults = { name: "Finn", bro: "Max", sis: "Lily", dog: "Biscuit" };
     state[key()] = state[key()].trim() || defaults[key()];
     step += 1;
     if (step >= prompts.length) { go("upstairs"); return; }
     q.text = prompts[step][1]; nameTxt.text = state[key()];
-    preview.text = `${state.name}` + (step > 1 ? `, ${state.bro}` : "") + (step > 2 ? `, ${state.sis}` : "") + (step > 3 ? `, ${state.cat1}` : "");
+    preview.text = `${state.name}` + (step > 1 ? `, ${state.bro}` : "") + (step > 2 ? `, ${state.sis}` : "");
   });
 });
 
@@ -219,25 +234,24 @@ scene("title", (opts = {}) => {
 // Two bedrooms side by side. Left: yours, with the storm outside the window.
 // Right: your sister's, where the present is. Stairs at the bottom-left.
 scene("upstairs", () => {
+  resetCam();
   save("upstairs");
+  music.play("home");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   wall(0, 0, W, 40, [140, 170, 200]);
   wall(0, 0, 8, H, [110, 80, 50]); wall(W - 8, 0, 8, H, [110, 80, 50]); wall(0, H - 8, W, 8, [110, 80, 50]);
-  // dividing wall with a doorway
   wall(W / 2 - 4, 0, 8, 110, [110, 80, 50]);
   wall(W / 2 - 4, 150, 8, H - 150, [110, 80, 50]);
-  // your window (storm outside)
-  add([rect(34, 26), pos(40, 6), color(20, 20, 36)]);
-  add([rect(30, 22), pos(42, 8), color(40, 30, 70)]);
-  add([rect(2, 22), pos(56, 8), color(232, 232, 240)]);
-  add([rect(30, 2), pos(42, 18), color(232, 232, 240)]);
-  stormFlashes({ x: 42, y: 8, w: 30, h: 22 });
-  // your bed and desk
+  // one window per room; they go purple once the explosion happens
+  const windows = [{ x: 42, y: 8, w: 30, h: 22 }, { x: W - 72, y: 8, w: 30, h: 22 }];
+  windows.forEach(drawWindow);
+  // your room: bed, desk
   wall(20, 60, 60, 36, [70, 110, 190]); add([rect(22, 12), pos(24, 64), color(244, 241, 234)]);
   wall(100, 120, 40, 24, [140, 100, 60]);
-  // sister's room: pink bed, rug, shelf
-  wall(W - 80, 60, 64, 36, [230, 120, 160]); add([rect(22, 12), pos(W - 76, 64), color(244, 241, 234)]);
+  // siblings' room: brother's blue bed, sister's pink bed, rug, shelf
+  wall(W / 2 + 14, 60, 50, 32, [90, 130, 210]); add([rect(18, 11), pos(W / 2 + 18, 64), color(244, 241, 234)]);
+  wall(W - 72, 60, 58, 32, [230, 120, 160]); add([rect(18, 11), pos(W - 68, 64), color(244, 241, 234)]);
   add([rect(70, 40), pos(W / 2 + 30, 150), color(200, 140, 190)]);
   wall(W - 70, 120, 54, 10, [140, 100, 60]);
   // stairs down
@@ -255,6 +269,7 @@ scene("upstairs", () => {
     const sparkle = add([text("*", { size: 8 }), pos(W - 62, 158), color(242, 208, 92), z(9)]);
     sparkle.onUpdate(() => { sparkle.hidden = Math.floor(time() * 4) % 3 === 0; sparkle.pos.x = W - 64 + Math.sin(time() * 5) * 8; });
     present.talk = () => {
+      if (!state.boomed) { say(["* A present. It has your name on it.", "* It can wait until morning. Probably."]); return; }
       if (!state.talkedSis) { say(["* A present. It has your name on it.", `* Maybe ask ${state.sis} about it first.`]); return; }
       openPresent();
     };
@@ -263,7 +278,8 @@ scene("upstairs", () => {
       say(["* You tear off the paper.", "* ...", "* It's long. It's shiny. It's heavier than it looks."], () => {
         destroy(present);
         state.hasSword = true;
-        const sw = add([sprite("sword"), pos(player.pos.x + 11, player.pos.y - 30), anchor("center"), z(60), scale(1)]);
+        music.sfx("pickup");
+        const sw = add([sprite("sword"), pos(player.pos.x + 11, player.pos.y - 30), anchor("center"), z(60)]);
         sw.onUpdate(() => { sw.pos.y -= 6 * dt(); sw.angle = Math.sin(time() * 6) * 5; });
         const flare = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.7), z(55), fixed()]);
         flare.onUpdate(() => { flare.opacity = Math.max(0, flare.opacity - 1.2 * dt()); });
@@ -277,7 +293,17 @@ scene("upstairs", () => {
     }
   }
 
-  const sis = state.kidnapped ? null : npc("sis", W - 100, 96, "sis", () => {
+  // the spare key lives behind your brother's bed
+  const brobed = add([rect(50, 6), pos(W / 2 + 14, 92), area(), opacity(0), "npc", "brobed"]);
+  brobed.talk = () => {
+    if (state.hasKey) { say([`* Behind ${state.bro}'s bed: dust, a sock, and one very old cracker.`]); return; }
+    if (!state.kidnapped) { say([`* ${state.bro}'s bed. There's something shiny wedged behind it.`, `* ${state.bro} is standing right there, though. Later.`]); return; }
+    state.hasKey = true; music.sfx("unlock");
+    say([`* You reach behind ${state.bro}'s bed. Dust. A sock. A robot made of...`, "* ...the SPARE KEY. He was using the spare key as a robot.", `* ${state.name} got the SPARE KEY!`]);
+  };
+
+  const sis = state.kidnapped ? null : npc("sis", W - 100, 100, "sis", () => {
+    if (!state.boomed) { say([`${state.sis}: ${state.name}? Why are you up? Go back to bed.`]); return; }
     if (!state.talkedSis) {
       state.talkedSis = true;
       say([
@@ -291,8 +317,9 @@ scene("upstairs", () => {
     say(state.hasSword ? [`${state.sis}: A SWORD?! That is so unfair. I want a sword.`] : [`${state.sis}: The present! On the rug! Go on!`]);
   }, { footY: 14 });
 
-  const bro = state.kidnapped ? null : npc("bro", W - 120, 100, "bro", () => {
+  const bro = state.kidnapped ? null : npc("bro", W - 124, 104, "bro", () => {
     state.talkedBro = true;
+    if (!state.boomed) { say([`${state.bro}: zzz... robots... zzz...`]); return; }
     say(state.hasSword ? [`${state.bro}: whoa. whoa. whoa.`, `${state.bro}: can I hold it? just for a second? no? okay.`] : [
       `${state.bro}: ${state.name}... the booming is getting CLOSER.`,
       `${state.bro}: I'm not scared either. ${state.sis} said not to be.`,
@@ -300,24 +327,46 @@ scene("upstairs", () => {
     ]);
   }, { footY: 12 });
 
-  const cat1 = npc("cat1", 130, 175, "cat1", () => say([`* ${state.cat1} is sitting in the doorway, exactly where you need to walk.`, `* ${state.cat1} does not care about the storm. ${state.cat1} cares about the doorway.`]), { footY: 4 });
-  const cat2 = npc("cat2", 40, 130, "cat2", () => say([`* ${state.cat2} is under your bed. Only the tail is visible.`, `* The tail says: no.`]), { footY: 4 });
-  cat1.onUpdate(() => { cat1.pos.x = 130 + Math.sin(time() * 0.8) * 3; });
+  npc("dog", 40, 128, "dog", () => say(state.kidnapped
+    ? [`* ${state.dog} is standing at the top of the stairs, growling at nothing.`, `* ${state.dog} knows.`]
+    : [`* ${state.dog} is under your bed. Only the tail is out.`, "* The tail says: no."]), { footY: 6 });
 
   wireTalk(player);
   hud();
 
+  // the explosion, then the windows start flashing purple
+  if (state.boomed) stormFlashes(windows);
+  else {
+    wait(0.4, () => say(["* It's late. The house is quiet.", "* Too quiet, actually. Even the crickets stopped."], () => {
+      wait(0.8, () => {
+        shake(30); music.sfx("boom");
+        const boom = add([text("BOOOOM!!", { size: 28 }), pos(W / 2, 100), anchor("center"), color(242, 208, 92), z(200), opacity(1)]);
+        boom.onUpdate(() => { boom.pos.y -= 20 * dt(); boom.opacity = Math.max(0, boom.opacity - 0.6 * dt()); });
+        wait(0.5, () => { state.boomed = true; stormFlashes(windows); });
+        wait(1.3, () => { shake(16); const bang = add([text("BANG!", { size: 22 }), pos(W / 2 + 60, 80), anchor("center"), color(199, 123, 214), z(200), opacity(1), lifespan(1, { fade: 0.6 })]); });
+        wait(2.0, () => {
+          destroy(boom);
+          say([
+            "* The whole house shook. Outside the windows, the sky is flashing PURPLE.",
+            "* Booming. Banging. Over and over. Something is happening on the hill.",
+            `* ${state.sis} is yelling from her room.`,
+          ]);
+        });
+      });
+    }));
+  }
+
   // LYGON breaks in
   function breakIn() {
     wait(0.8, () => {
-      shake(30);
+      shake(30); music.sfx("boom");
       const crash = add([text("KRRAAASH!!", { size: 22 }), pos(W / 2, 100), anchor("center"), color(242, 208, 92), z(200), opacity(1)]);
       crash.onUpdate(() => { crash.opacity = Math.max(0, crash.opacity - 0.7 * dt()); });
       wait(1.2, () => {
         destroy(crash);
         say(["* Something just came through the front door.", "* Something is coming UP THE STAIRS.", "* Big, slow, heavy footsteps. And laughing."], () => {
-          const clown = add([sprite("lygon"), pos(W / 2 - 60, 130), anchor("topleft"), z(30)]);
-          shake(14);
+          const clown = add([sprite("lygon"), pos(W / 2 - 64, 120), anchor("topleft"), z(30)]);
+          shake(14); music.play("battle");
           const wash = add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0.35), z(25), fixed()]);
           wash.onUpdate(() => { wash.opacity = Math.max(0, wash.opacity - 0.5 * dt()); });
           say([
@@ -325,13 +374,13 @@ scene("upstairs", () => {
             "LYGON: Two little helpers for my show! Perfect! PERFECT!",
             `${state.sis}: ${state.name}!!`,
             `${state.bro}: ${state.name}!!!`,
-            "LYGON: See you at the big top, sword boy. Bring a ticket! Hee hee!",
+            "LYGON: See you at the big top, sword boy. Oh — and the doors stay LOCKED till showtime! Hee hee!",
           ], () => {
             shake(20);
             const poof = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.9), z(90), fixed()]);
             poof.onUpdate(() => { poof.opacity = Math.max(0, poof.opacity - 1.5 * dt()); });
             destroy(clown); if (sis) destroy(sis); if (bro) destroy(bro);
-            state.kidnapped = true;
+            state.kidnapped = true; music.play("home");
             wait(0.6, () => say([
               "* ...They're gone.",
               `* ${state.sis} and ${state.bro} are gone.`,
@@ -344,16 +393,9 @@ scene("upstairs", () => {
     });
   }
 
-  if (!state.hasSword) {
-    wait(0.4, () => say([
-      "* BOOM. BANG. The window flashes purple again.",
-      "* Whatever is happening outside, it's happening on the hill.",
-      `* ${state.sis} is yelling something from her room.`,
-    ]));
-  }
-
   player.onCollide("stairs", () => {
     if (dialogOpen) return;
+    if (!state.boomed) { say(["* It's the middle of the night. Bed is the other way."]); player.pos.y -= 8; return; }
     if (!state.hasSword) { say([`* ${state.sis} said something about a present. Check her room first.`]); player.pos.y -= 8; return; }
     if (!state.kidnapped) { player.pos.y -= 8; return; }
     go("downstairs");
@@ -362,62 +404,110 @@ scene("upstairs", () => {
 
 // ---------------------------------------------------------------- scene: downstairs
 
+const MOM_LINES = () => [
+  `Mom: ${state.name}, if you see that clown again, you tell him your MOTHER is very disappointed in him.`,
+  "Mom: I packed you cookies. I don't know what else a mother does in this situation.",
+  `Mom: ${state.sis} hates thunder. Hold her hand when you find her. Even if she says no.`,
+  "Mom: Come back with all your fingers. That's the rule.",
+  `Mom: ${state.dog} won't stop staring at the door. I don't like it.`,
+  `Mom: Juice heals you all the way. Don't drink it for fun.`,
+];
+const DAD_LINES = () => [
+  "Dad: I tried the door. I tried it HARD. It's sealed with... purple.",
+  "Dad: I should be the one going. But you're the one with the sword. That's how it works, apparently.",
+  `Dad: ${state.bro} says he isn't scared of anything. He's scared of the vacuum. Find him fast.`,
+  "Dad: Hit the clown once for me. Twice, actually. Once for your mother.",
+  "Dad: I'm going to fix that door. Right now. With my HANDS.",
+  `Dad: Your sister bit him on the way out. I saw it. That's my girl.`,
+];
+
 scene("downstairs", () => {
+  resetCam();
   save("downstairs");
+  music.play("home");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   wall(0, 0, W, 40, [150, 190, 220]);
   wall(0, 0, 8, H, [110, 80, 50]); wall(W - 8, 0, 8, H, [110, 80, 50]);
   wall(0, H - 8, W / 2 - 22, 8, [110, 80, 50]); wall(W / 2 + 22, H - 8, W / 2 - 22, 8, [110, 80, 50]);
-  // the broken front door
+  const windows = [{ x: 100, y: 8, w: 30, h: 22 }, { x: W - 110, y: 8, w: 30, h: 22 }];
+  windows.forEach(drawWindow);
+  stormFlashes(windows);
+  // the front door, sealed purple until you have the key
   add([rect(44, 8), pos(W / 2 - 22, H - 8), color(60, 40, 20)]);
-  add([rect(30, 20), pos(W / 2 - 40, H - 40), color(80, 55, 30), rotate(20)]);
-  add([rect(8, 26), pos(W / 2 + 20, H - 34), color(80, 55, 30), rotate(-30)]);
-  add([text("v", { size: 8 }), pos(W / 2, H - 14), anchor("center"), color(242, 208, 92)]);
-  // stairs up (top-left)
+  add([rect(4, 4), pos(W / 2 + 12, H - 7), color(242, 208, 92)]);
+  const seal = add([rect(48, 12), pos(W / 2 - 24, H - 12), color(199, 123, 214), opacity(0.4), z(3)]);
+  seal.onUpdate(() => { seal.opacity = state.hasKey ? 0 : 0.3 + 0.25 * Math.abs(Math.sin(time() * 4)); });
+  add([text("v", { size: 8 }), pos(W / 2, H - 16), anchor("center"), color(242, 208, 92)]);
+  // stairs up
   add([rect(30, 28), pos(14, 40), color(110, 80, 50)]);
-  // kitchen table, couch, stove
+  for (let i = 0; i < 5; i++) add([rect(30, 1), pos(14, 42 + i * 5), color(70, 50, 30)]);
+  add([text("^", { size: 8 }), pos(29, 72), anchor("center"), color(242, 208, 92)]);
+  add([rect(30, 6), pos(14, 40), area(), "stairsup"]);
+  // furniture
   wall(60, 120, 60, 30, [140, 100, 60]); add([rect(56, 4), pos(62, 118), color(170, 130, 90)]);
   wall(200, 70, 80, 30, [90, 110, 160]);
   wall(W - 60, 130, 50, 30, [110, 110, 122]);
-  // knocked-over things
+  // knocked-over things from the break-in
   add([rect(10, 10), pos(140, 180), color(60, 40, 20), rotate(35)]);
   add([rect(14, 4), pos(180, 200), color(200, 80, 90), rotate(-15)]);
 
-  const player = makePlayer(50, 80);
+  const player = makePlayer(50, 84);
 
   npc("mom", W - 100, 140, "mom", () => {
     if (!state.talkedMom) {
-      state.talkedMom = true;
+      state.talkedMom = true; music.sfx("pickup");
       say([
         `Mom: ${state.name}! Oh thank goodness. Where are ${state.sis} and ${state.bro}?!`,
         "Mom: A CLOWN. A clown came through the door. Our DOOR.",
-        `Mom: ...You have a sword. Why do you have a sword. Where did you get a sword.`,
+        "Mom: ...You have a sword. Why do you have a sword. Where did you get a sword.",
         `Mom: No. No time. Go. GO. Bring them home, ${state.name}.`,
         "Mom: Take these. Cookies heal you. Juice heals you all the way.",
         "* You got 3 Cookies and a Juice Box!",
       ]);
       return;
     }
-    say([`Mom: Up the hill. Follow the purple. And ${state.name}...`, "Mom: ...come back. All three of you."]);
+    say([choose(MOM_LINES())]);
   }, { footY: 16 });
+
+  npc("dad", W / 2 + 50, H - 76, "dad", () => {
+    if (!state.talkedDad) {
+      state.talkedDad = true;
+      say([
+        `Dad: ${state.name}. Okay. Okay okay okay.`,
+        "Dad: The front door is sealed. Purple. Humming. I pulled on it until my arms hurt.",
+        `Dad: The spare key! ${state.bro} took it last week — he was using it as a robot.`,
+        `Dad: It's behind his bed. Go. Get it. Then go get your brother and sister.`,
+      ]);
+      return;
+    }
+    if (!state.hasKey) { say([choose([DAD_LINES()[0], `Dad: The spare key. Behind ${state.bro}'s bed. Upstairs.`])]); return; }
+    say([choose(DAD_LINES())]);
+  }, { footY: 16 });
+
+  npc("dog", 120, 200, "dog", () => say([`* ${state.dog} is sitting in front of the door, staring at it.`, `* ${state.dog} looks at you, then at the door, then at you.`, "* Woof."]), { footY: 6 });
 
   wireTalk(player);
   hud();
 
+  player.onCollide("stairsup", () => { if (!dialogOpen) go("upstairs"); });
   add([rect(44, 6), pos(W / 2 - 22, H - 6), area(), "door"]);
   player.onCollide("door", () => {
     if (dialogOpen) return;
-    if (!state.talkedMom) { say(["* Mom is calling your name."]); player.pos.y -= 8; return; }
-    go("town");
+    if (!state.talkedMom || !state.talkedDad) { say(["* Mom and Dad are calling your name."]); player.pos.y -= 8; return; }
+    if (!state.hasKey) { say(["* Locked. LYGON's purple seal hums on the handle.", `* Dad said the spare key is behind ${state.bro}'s bed.`]); player.pos.y -= 8; return; }
+    music.sfx("unlock");
+    say(["* The spare key turns. The purple seal pops like a soap bubble.", `* ${state.name} stepped out into the flashing night.`], () => go("town"));
   });
 
-  wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is in three pieces. Mom is in the kitchen."]));
+  wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is glowing purple. Mom and Dad are both talking at once."]));
 });
 
 // ---------------------------------------------------------------- scene: town
 
 scene("town", () => {
+  resetCam();
+  music.play("home");
   save("town");
   add([rect(W, H), pos(0, 0), color(94, 170, 100)]);
   for (let i = 0; i < 120; i++) add([rect(1, 2), pos(rand(0, W), rand(0, H)), color(70, 140, 80)]);
@@ -439,80 +529,209 @@ scene("town", () => {
 
   const player = makePlayer(W / 2 - 11, H - 44);
 
-  if (!state.beatBugon) {
-    const flop = add([sprite("bugon"), pos(W / 2 - 22, 16), anchor("topleft"), z(4), area({ shape: new Rect(vec2(10, 10), 24, 24) }), "bugonzone"]);
-    flop.onUpdate(() => { flop.pos.y = 16 + Math.abs(Math.sin(time() * 4)) * -3; });
-    player.onCollide("bugonzone", () => {
-      if (dialogOpen) return;
-      player.pos.y += 10;
+  // the cave mouth at the top of the hill, right behind the wreck
+  add([sprite("cavemouth"), pos(W / 2 - 24, 0), anchor("topleft"), z(1)]);
+  const cglow = add([rect(30, 20), pos(W / 2 - 15, 14), color(199, 123, 214), opacity(0.2), z(2)]);
+  cglow.onUpdate(() => { cglow.opacity = 0.12 + 0.12 * Math.abs(Math.sin(time() * 2.5)); });
+  add([rect(24, 8), pos(W / 2 - 12, 26), area(), "cavezone"]);
+  player.onCollide("cavezone", () => {
+    if (dialogOpen) return;
+    if (state.cave === 0 && !state.beatBugon) {
       say([
-        "* Something is guarding the path. It has ears like two dinner plates.",
-        "BUGON: FLAP FLAP FLAP!!",
-        `* It's one of the clown's. It is not going to let you past.`,
-        `* ${state.name} drew the sword.`,
-      ], () => go("battle", "bugon"));
-    });
-  } else {
-    add([sprite("tent"), pos(W / 2 - 23, 8), anchor("topleft"), z(3)]);
-    add([rect(24, 8), pos(W / 2 - 12, 22), area(), "tentzone"]);
-    player.onCollide("tentzone", () => {
-      if (dialogOpen) return;
-      player.pos.y += 10;
-      say([
-        "* A circus tent. Music inside. Laughing inside.",
-        `* And two small voices yelling "${state.name}!!"`,
-        "LYGON: Aaaand here's our volunteer! Hee hee hee!",
-        `* ${state.name} did not buy a ticket.`,
-      ], () => go("battle", "lygon"));
-    });
-  }
+        "* A cave. The wagon crashed right into the mouth of it.",
+        `* From inside: circus music, laughing, and two small voices yelling "${state.name}!!"`,
+        `* ${state.name} drew the sword and went in.`,
+      ], () => go("cave"));
+    } else go("cave");
+  });
 
-  npc("elder", 90, H - 50, "elder", () => say(state.beatBugon ? [
-    "Old Man: You sent that ear-thing packing? Ha! Not bad, kid.",
-    "Old Man: Your brother and sister are in that tent. I heard 'em. Go get 'em.",
+  npc("elder", 90, H - 50, "elder", () => say(state.cave > 0 ? [
+    `Old Man: Still in one piece? You've beaten ${state.cave} of the clown's critters, by my count.`,
+    "Old Man: The big-eared one guards the inner door. Then it's the clown himself.",
   ] : [
     "Old Man: Sixty years on this hill. Never once has a CIRCUS fallen on it.",
-    "Old Man: The clown took your kin up the path. There's a guard. Big ears. Bad temper.",
+    "Old Man: The clown dragged your kin into the cave. His whole freak show lives in there.",
     "Old Man: You've got a sword. That's more than I had at your age. Go on.",
   ]), { footY: 16 });
 
-  npc("kid", W - 110, H - 50, "kid", () => say(state.beatBugon ? [
-    "Kid: I saw the whole thing! You were like SLASH and it was like FLAP!",
-    "Kid: There's a clown in that tent. Clowns are fine. I'm fine. I'm not scared of clowns.",
+  npc("kid", W - 110, H - 50, "kid", () => say(state.cave > 0 ? [
+    "Kid: You went IN there?! And came back OUT?!",
+    "Kid: Everyone says there's robots in that cave. And aliens. And a toad with too many teeth.",
   ] : [
     "Kid: I saw the clown carry two kids up the hill. One of them bit him.",
     `Kid: You gonna go up there, ${state.name}? Can I watch from here?`,
     "Kid: PSI Ice freezes stuff, by the way. My cousin told me. He knows things.",
   ]), { footY: 14 });
 
-  const dog = npc("dog", 200, 120, "dog", () => say(["* The dog looks at you. The dog looks at the hill.", "* The dog looks at you again, very seriously.", "* Woof."]), { footY: 6 });
+  const dog = npc("dog", 200, 120, "dog", () => say([`* ${state.dog} followed you out. ${state.dog} is not supposed to be outside.`, `* ${state.dog} looks at the hill, then at you, very seriously.`, "* Woof."]), { footY: 6 });
   let dogT = 0;
   dog.onUpdate(() => { dogT += dt(); dog.pos.x = 200 + Math.sin(dogT * 0.7) * 14; });
 
   wireTalk(player);
   hud();
 
-  wait(0.3, () => say(state.beatBugon
-    ? ["* The stomping has stopped. Now there's music.", "* Circus music, coming from a tent that wasn't there before."]
-    : ["* The air smells like popcorn and lightning.", "* Up the path, something is stomping."]));
+  wait(0.3, () => say(state.cave > 0
+    ? ["* The cave is still humming. Your family is still in there."]
+    : ["* The air smells like popcorn and lightning.", "* Up the path, a cave is glowing purple."]));
+});
+
+// ---------------------------------------------------------------- scene: cave
+
+scene("cave", () => {
+  save("cave");
+  music.play("cave");
+  // rock
+  add([rect(W, CAVE_H), pos(0, 0), color(38, 32, 54)]);
+  for (let i = 0; i < 260; i++) add([rect(rand(2, 5), rand(2, 4)), pos(rand(0, W), rand(0, CAVE_H)), color(52, 44, 72)]);
+  // winding path: alternating offsets, 44 wide
+  const segs = [];
+  for (let y = CAVE_H; y > 0; y -= 100) {
+    const off = Math.sin(y / 100) * 60;
+    segs.push({ x: W / 2 - 22 + off, y: y - 100, w: 44, h: 100 });
+  }
+  segs.forEach((sg, i) => {
+    add([rect(sg.w, sg.h), pos(sg.x, sg.y), color(96, 84, 112), z(1)]);
+    if (segs[i + 1]) { // connector so the path stays walkable across the bend
+      const a = Math.min(sg.x, segs[i + 1].x), b = Math.max(sg.x, segs[i + 1].x) + 44;
+      add([rect(b - a, 30), pos(a, sg.y - 15), color(96, 84, 112), z(1)]);
+    }
+  });
+  // walls: everything not path. Cheap version: two rock walls that follow each segment.
+  segs.forEach((sg, i) => {
+    const nx = segs[i + 1] ? segs[i + 1].x : sg.x;
+    wall(0, sg.y + 15, Math.min(sg.x, nx) - 2, sg.h - 30);
+    wall(Math.max(sg.x, nx) + 46, sg.y + 15, W - (Math.max(sg.x, nx) + 46), sg.h - 30);
+  });
+  wall(0, CAVE_H - 4, W, 4); wall(0, 0, W, 4);
+  // torches
+  segs.forEach((sg, i) => {
+    if (i % 2) return;
+    const t = add([rect(3, 6), pos(sg.x - 8, sg.y + 40), color(255, 160, 64), z(2)]);
+    const glow = add([rect(40, 40), pos(sg.x - 26, sg.y + 22), color(255, 190, 90), opacity(0.08), z(0)]);
+    t.onUpdate(() => { t.color = rgb(255, 130 + rand(0, 60), 40); glow.opacity = 0.06 + rand(0, 0.04); });
+  });
+
+  const start = segs[0];
+  const player = makePlayer(start.x + 11, CAVE_H - 60);
+  player.onUpdate(() => {
+    const y = Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16));
+    camPos(W / 2, y);
+  });
+
+  // encounters, one per bend, in order
+  CAVE_ENEMIES.forEach((name, i) => {
+    if (i < state.cave) return;
+    const sg = segs[i + 1];
+    const e = add([sprite(name), pos(sg.x + 22, sg.y + 50), anchor("center"), z(5), area({ shape: new Rect(vec2(-22, -20), 44, 40) }), "enc"]);
+    e.enemyIndex = i; e.enemyName = name;
+    const by = sg.y + 50;
+    e.onUpdate(() => { e.pos.y = by + Math.sin(time() * 3 + i) * 2; });
+  });
+  player.onCollide("enc", (e) => {
+    if (dialogOpen) return;
+    if (e.enemyIndex !== state.cave) { player.pos.y += 12; return; }
+    player.pos.y += 12;
+    const intro = ENEMIES[e.enemyName].meet;
+    say(intro, () => go("battle", e.enemyName));
+  });
+
+  // Bugon guards the inner door once the six are down
+  if (state.cave >= CAVE_ENEMIES.length && !state.beatBugon) {
+    const sg = segs[8];
+    const b = add([sprite("bugon"), pos(sg.x + 22, sg.y + 40), anchor("center"), z(5), area({ shape: new Rect(vec2(-24, -22), 48, 44) }), "bugonzone"]);
+    b.onUpdate(() => { b.pos.y = sg.y + 40 + Math.abs(Math.sin(time() * 4)) * -3; });
+    player.onCollide("bugonzone", () => {
+      if (dialogOpen) return;
+      player.pos.y += 12;
+      say(ENEMIES.bugon.meet, () => go("battle", "bugon"));
+    });
+  }
+  // the inner chamber door
+  const top = segs[segs.length - 1];
+  add([rect(44, 30), pos(top.x, 4), color(20, 16, 30), z(2)]);
+  add([rect(36, 24), pos(top.x + 4, 6), color(60, 20, 70), z(2)]);
+  const doorGlow = add([rect(44, 30), pos(top.x, 4), color(199, 123, 214), opacity(0.2), z(3)]);
+  doorGlow.onUpdate(() => { doorGlow.opacity = 0.1 + 0.15 * Math.abs(Math.sin(time() * 3)); });
+  add([rect(44, 8), pos(top.x, 20), area(), "lygondoor"]);
+  player.onCollide("lygondoor", () => {
+    if (dialogOpen) return;
+    player.pos.y += 12;
+    if (!state.beatBugon) { say(["* The door is shut tight. Something big is still guarding it."]); return; }
+    say(ENEMIES.lygon.meet, () => go("battle", "lygon"));
+  });
+
+  // exit back to town at the bottom
+  add([rect(44, 6), pos(start.x, CAVE_H - 8), area(), "caveexit"]);
+  player.onCollide("caveexit", () => { if (!dialogOpen) go("town"); });
+
+  hud();
+  const fights = CAVE_ENEMIES.length - state.cave;
+  wait(0.3, () => say(state.cave === 0
+    ? ["* It's dark. It smells like wet rock and cotton candy.", "* Something is chittering up ahead."]
+    : state.beatBugon ? ["* The way to the chamber is open. This is it."]
+    : [`* ${fights} of the clown's critters left between you and the big-eared one.`]));
 });
 
 // ---------------------------------------------------------------- scene: battle
 
 const ENEMIES = {
+  chompo: {
+    name: "CHOMPO", spr: "chompo", hp: 16, weak: "ice", bg: [30, 50, 60], band: [40, 70, 80],
+    meet: ["* A pink toad with far too many teeth hops into the path.", "CHOMPO: chomp?"],
+    intro: ["* CHOMPO wants to bite something!"],
+    attacks: [{ t: "chomped at %n!", d: [2, 4] }, { t: "licked its own eye.", d: [0, 0] }],
+    win: ["* CHOMPO burped and hopped away."], small: true,
+  },
+  zagg: {
+    name: "ZAGG", spr: "zagg", hp: 20, weak: "fire", bg: [30, 40, 70], band: [40, 55, 95],
+    meet: ["* A blue thing with one enormous eye and a zigzag grin blocks the way.", "ZAGG: zzzzZZAGG."],
+    intro: ["* ZAGG is grinning. It has a LOT of grin."],
+    attacks: [{ t: "grinned at %n! It's very unsettling.", d: [2, 5] }, { t: "blinked. Slowly.", d: [0, 0] }],
+    win: ["* ZAGG's grin got smaller and smaller until it left."], small: true,
+  },
+  skitter: {
+    name: "SKITTER", spr: "skitter", hp: 22, weak: "ice", bg: [50, 35, 60], band: [70, 50, 85],
+    meet: ["* Something low and clicky scuttles out of the dark, headlamp swinging.", "SKITTER: bzzt. INTRUDER."],
+    intro: ["* SKITTER's headlamp is pointed right at you!"],
+    attacks: [{ t: "zapped %n with its headlamp!", d: [3, 5] }, { t: "scuttled in a circle.", d: [0, 0] }],
+    win: ["* SKITTER's little legs gave out. It rolled away."], small: true,
+  },
+  wibblo: {
+    name: "WIBBLO", spr: "wibblo", hp: 24, weak: "fire", bg: [60, 30, 60], band: [85, 45, 85],
+    meet: ["* A pink blob with three eyes and two wiggly antennae drifts down.", "WIBBLO: wibble wibble."],
+    intro: ["* WIBBLO's antennae are wiggling menacingly!"],
+    attacks: [{ t: "bonked %n with an antenna!", d: [3, 6] }, { t: "wibbled.", d: [0, 0] }],
+    win: ["* WIBBLO wibbled off in a huff."], small: true,
+  },
+  redstack: {
+    name: "REDSTACK", spr: "redstack", hp: 28, weak: "ice", bg: [70, 25, 30], band: [95, 40, 45],
+    meet: ["* A tall red robot unfolds from the wall, segment by segment.", "REDSTACK: HALT. TICKETS PLEASE."],
+    intro: ["* REDSTACK is stacking up!"],
+    attacks: [{ t: "swung a claw at %n!", d: [3, 6] }, { t: "checked %n for a ticket. Found none.", d: [1, 3] }],
+    win: ["* REDSTACK toppled over one segment at a time. Clonk. Clonk. Clonk."], small: true,
+  },
+  boxor: {
+    name: "BOXOR", spr: "boxor", hp: 36, weak: "fire", bg: [55, 30, 65], band: [80, 45, 90],
+    meet: ["* A huge boxy robot with one red eye fills the tunnel.", "BOXOR: I AM THE OPENING ACT."],
+    intro: ["* BOXOR's red eye lit up!", "BOXOR: NO REFUNDS."],
+    attacks: [{ t: "fired an eye beam at %n!", d: [4, 7] }, { t: "stomped! The cave shook!", d: [3, 5] }, { t: "rebooted.", d: [0, 0] }],
+    win: ["* BOXOR's eye flickered out.", "BOXOR: ...intermission."], small: true,
+  },
   bugon: {
     name: "BUGON", spr: "bugon", hp: 45, weak: "ice", bg: [60, 30, 90], band: [90, 50, 130],
+    meet: ["* The thing guarding the inner door has ears like two dinner plates.", "BUGON: FLAP FLAP FLAP!!", `* ${state.name} tightened the grip on the sword.`],
     intro: ["* BUGON flapped out in front of you!", "* Its ears are making a lot of wind."],
     attacks: [
       { t: "flapped its giant ears at %n!", d: [2, 5] },
       { t: "stomped its little yellow feet!", d: [3, 6] },
       { t: "tried to look scary.", d: [0, 0] },
     ],
-    win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The path is clear."],
-    next: () => { state.beatBugon = true; state.hp = state.maxHp; state.pp = state.maxPp; go("town"); },
+    win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open."],
+    next: () => { state.beatBugon = true; state.hp = state.maxHp; state.pp = state.maxPp; go("cave"); },
   },
   lygon: {
     name: "LYGON", spr: "lygon", hp: 80, weak: "fire", bg: [90, 30, 40], band: [130, 50, 60],
+    meet: ["* The chamber is lit like a circus ring. Two cages hang from the ceiling.", `${state.sis}: ${state.name}!!`, `${state.bro}: ${state.name}!!!`, "LYGON: Aaaand here's our volunteer! Hee hee hee!", `* ${state.name} did not buy a ticket.`],
     intro: ["* LYGON stepped into the spotlight!", "LYGON: Hee hee hee. Let's give them a SHOW!"],
     attacks: [
       { t: "honked a horn right in %n's face!", d: [3, 7] },
@@ -532,6 +751,8 @@ const PSI = [
 ];
 
 scene("battle", (which) => {
+  resetCam();
+  music.play("battle");
   const def = ENEMIES[which];
   const boss = { name: def.name, hp: def.hp, maxHp: def.hp, frozen: 0 };
   let busy = true;
@@ -570,6 +791,7 @@ scene("battle", (which) => {
   const ebar = add([rect(100, 6), pos(W / 2 - 50, 150), color(224, 69, 63), z(21)]);
   ebar.onUpdate(() => { ebar.width = 100 * Math.max(0, boss.hp) / boss.maxHp; });
   add([text(boss.name, { size: 8 }), pos(W / 2, 142), anchor("center"), color(232, 232, 240), z(21)]);
+  if (def.small) add([text(`cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
 
   const menuBox = add([rect(180, 40, { radius: 3 }), pos(130, H - 112), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
   const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, H - 104 + Math.floor(i / 2) * 14), color(232, 232, 240), z(21)]));
@@ -651,15 +873,22 @@ scene("battle", (which) => {
     }
   }
 
+  if (def.small && !def.next) def.next = () => {
+    state.cave += 1;
+    state.hp = Math.min(state.maxHp, state.hp + 12);
+    state.pp = Math.min(state.maxPp, state.pp + 8);
+    if (state.cave % 2 === 0) state.cookies += 1;
+    go("cave");
+  };
   function hitBoss(dmg, verb) {
-    boss.hp -= dmg;
+    boss.hp -= dmg; music.sfx("hit");
     shake(8);
     add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.5), z(50), lifespan(0.08)]);
     bossSpr.pos.x = W / 2 + 6;
     wait(0.08, () => bossSpr.pos.x = W / 2);
     add([text(`${dmg}`, { size: 14 }), pos(W / 2 + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), lifespan(0.8), move(UP, 30)]);
     const lines = [`* ${state.name} ${verb} ${dmg} damage to ${boss.name}!`];
-    if (boss.hp <= 0) say(lines.concat(def.win), def.next);
+    if (boss.hp <= 0) say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (state.cave % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next);
     else say(lines, enemyTurn);
   }
 
@@ -671,7 +900,7 @@ scene("battle", (which) => {
     if (dmg > 0) { state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); }
     if (state.hp <= 0) {
       say([line, `* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."],
-        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = 3; state.juice = 1; go("town"); });
+        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave"); });
     } else say([line], () => busy = false);
   }
 
@@ -681,6 +910,8 @@ scene("battle", (which) => {
 // ---------------------------------------------------------------- scene: end
 
 scene("end", () => {
+  resetCam();
+  music.play("victory");
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
   for (let i = 0; i < 60; i++) {
     const c = add([rect(2, 3), pos(rand(0, W), rand(-H, 0)), color(...choose([[224, 69, 63], [242, 208, 92], [58, 111, 216], [79, 176, 106], [199, 123, 214]])), z(1)]);
@@ -690,12 +921,11 @@ scene("end", () => {
   add([sprite("hero_sword"), pos(W / 2, 60), anchor("center"), z(5)]);
   add([sprite("sis"), pos(W / 2 - 30, 64), anchor("center"), z(5)]);
   add([sprite("bro"), pos(W / 2 + 30, 64), anchor("center"), z(5)]);
-  add([sprite("cat1"), pos(W / 2 - 52, 78), anchor("center"), z(5)]);
-  add([sprite("cat2"), pos(W / 2 + 52, 78), anchor("center"), z(5)]);
+  add([sprite("dog"), pos(W / 2 - 56, 76), anchor("center"), z(5)]);
   add([text("YOU SAVED THEM!", { size: 20 }), pos(W / 2, 108), anchor("center"), color(242, 208, 92), z(5)]);
   add([text(`${state.name} rescued ${state.sis} and ${state.bro}!`, { size: 8 }), pos(W / 2, 132), anchor("center"), color(232, 232, 240), z(5)]);
   add([text(`${state.sis}: "I wasn't scared."\n${state.bro}: "I was a little scared."`, { size: 8, align: "center", lineSpacing: 3 }), pos(W / 2, 156), anchor("center"), color(207, 207, 216), z(5)]);
-  add([text(`${state.cat1} and ${state.cat2} were fine the whole time.`, { size: 8 }), pos(W / 2, 182), anchor("center"), color(138, 138, 153), z(5)]);
+  add([text(`${state.dog} was a very good dog the whole time.`, { size: 8 }), pos(W / 2, 182), anchor("center"), color(138, 138, 153), z(5)]);
   add([text("~ to be continued ~", { size: 8 }), pos(W / 2, 200), anchor("center"), color(138, 138, 153), z(5)]);
   add([text("press SPACE to play again", { size: 8 }), pos(W / 2, 220), anchor("center"), color(242, 208, 92), z(5)]);
   clearSave();
