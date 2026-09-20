@@ -794,10 +794,11 @@ scene("battle", (which) => {
   }
 
   // player panel
-  add([rect(110, 40, { radius: 3 }), pos(10, H - 112), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
-  add([text(state.name, { size: 8 }), pos(18, H - 104), color(242, 208, 92), z(21)]);
-  const hpT = add([text("", { size: 8 }), pos(18, H - 92), color(232, 232, 240), z(21)]);
-  const ppT = add([text("", { size: 8 }), pos(18, H - 82), color(51, 199, 193), z(21)]);
+  const PY = H - 54; // panels hug the bottom edge, clear of the enemy name and HP bar
+  add([rect(110, 46, { radius: 3 }), pos(10, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
+  add([text(state.name, { size: 8 }), pos(18, PY + 8), color(242, 208, 92), z(21)]);
+  const hpT = add([text("", { size: 8 }), pos(18, PY + 20), color(232, 232, 240), z(21)]);
+  const ppT = add([text("", { size: 8 }), pos(18, PY + 31), color(51, 199, 193), z(21)]);
   let shownHp = state.hp;
   hpT.onUpdate(() => {
     shownHp += Math.sign(state.hp - shownHp) * Math.min(Math.abs(state.hp - shownHp), 30 * dt());
@@ -805,16 +806,16 @@ scene("battle", (which) => {
     ppT.text = `PP ${state.pp}/${state.maxPp}`;
   });
 
-  add([rect(100, 6), pos(W / 2 - 50, 150), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
-  const ebar = add([rect(100, 6), pos(W / 2 - 50, 150), color(224, 69, 63), z(21)]);
+  add([rect(100, 6), pos(W / 2 - 50, 154), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
+  const ebar = add([rect(100, 6), pos(W / 2 - 50, 154), color(224, 69, 63), z(21)]);
   ebar.onUpdate(() => { ebar.width = 100 * Math.max(0, boss.hp) / boss.maxHp; });
-  add([text(boss.name, { size: 8 }), pos(W / 2, 142), anchor("center"), color(232, 232, 240), z(21)]);
+  add([text(boss.name, { size: 8 }), pos(W / 2, 144), anchor("center"), color(232, 232, 240), z(21)]);
   if (def.small) add([text(`cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
 
-  const menuBox = add([rect(180, 40, { radius: 3 }), pos(130, H - 112), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
-  const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, H - 104 + Math.floor(i / 2) * 14), color(232, 232, 240), z(21)]));
+  const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
+  const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
   const cursor = add([text(">", { size: 8 }), pos(0, 0), color(242, 208, 92), z(22)]);
-  const hint = add([text("", { size: 8 }), pos(W / 2, H - 120), anchor("center"), color(207, 207, 216), z(22)]);
+  const hint = add([text("", { size: 8 }), pos(220, PY - 10), anchor("center"), color(207, 207, 216), z(22)]);
 
   function labels() {
     if (sub === "psi") return PSI.map((p) => `${p.name} ${p.pp}`).concat(["Back"]);
