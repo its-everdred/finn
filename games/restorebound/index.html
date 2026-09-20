@@ -2,22 +2,49 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>RestoreBound</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #0b0b14; color: #e8e8f0; font-family: monospace; }
-  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
-  canvas { image-rendering: pixelated; image-rendering: crisp-edges; outline: none; max-width: 100vw; max-height: 100vh; }
-  .bar { display: flex; gap: 12px; align-items: center; font-size: 12px; opacity: .75; padding: 0 12px; text-align: center; flex-wrap: wrap; justify-content: center; }
+  html, body { margin: 0; height: 100%; background: #0b0b14; color: #e8e8f0; font-family: monospace; overscroll-behavior: none; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #stage { position: relative; width: min(100vw, 960px); aspect-ratio: 4 / 3; }
+  canvas#game { position: absolute; inset: 0; width: 100% !important; height: 100% !important; image-rendering: pixelated; image-rendering: crisp-edges; outline: none; }
+  .bar { display: flex; gap: 10px; align-items: center; font-size: 12px; opacity: .8; padding: 0 12px 8px; text-align: center; flex-wrap: wrap; justify-content: center; }
   a { color: #8fd3ff; }
-  button { font: inherit; font-size: 12px; background: #14142a; color: #f2d05c; border: 1px solid #f2d05c; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+  button { font: inherit; font-size: 12px; background: #14142a; color: #f2d05c; border: 1px solid #f2d05c; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
   button:hover { background: #f2d05c; color: #0b0b14; }
+  /* touch controls: shown on coarse pointers, overlaid on the lower part of the stage */
+  #touch { display: none; position: absolute; inset: 0; pointer-events: none; }
+  @media (pointer: coarse) { #touch { display: block; } .kbd { display: none; } }
+  .pad, .btns { position: absolute; bottom: 4%; pointer-events: auto; }
+  .pad { left: 3%; width: 34vw; max-width: 200px; aspect-ratio: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; }
+  .pad button { padding: 0; border-radius: 10px; background: rgba(20,20,42,.55); border: 1px solid rgba(242,208,92,.6); color: #f2d05c; font-size: 22px; }
+  .pad .u { grid-area: 1 / 2; } .pad .l { grid-area: 2 / 1; } .pad .r { grid-area: 2 / 3; } .pad .d { grid-area: 3 / 2; }
+  .btns { right: 3%; display: flex; gap: 14px; align-items: flex-end; }
+  .btns button { width: 17vw; max-width: 96px; aspect-ratio: 1; border-radius: 50%; background: rgba(20,20,42,.55); border: 2px solid rgba(242,208,92,.7); color: #f2d05c; font-size: 16px; padding: 0; }
+  .btns .b { width: 13vw; max-width: 72px; margin-bottom: 8px; border-color: rgba(143,211,255,.7); color: #8fd3ff; }
+  .pad button:active, .btns button:active { background: rgba(242,208,92,.35); }
 </style>
 </head>
 <body>
-  <canvas id="game" tabindex="0"></canvas>
+  <div id="stage">
+    <canvas id="game" tabindex="0"></canvas>
+    <div id="touch">
+      <div class="pad">
+        <button class="u" data-key="ArrowUp" aria-label="up">&#9650;</button>
+        <button class="l" data-key="ArrowLeft" aria-label="left">&#9664;</button>
+        <button class="r" data-key="ArrowRight" aria-label="right">&#9654;</button>
+        <button class="d" data-key="ArrowDown" aria-label="down">&#9660;</button>
+      </div>
+      <div class="btns">
+        <button class="b" data-key="/" aria-label="back">B</button>
+        <button class="a" data-key=" " aria-label="confirm">A</button>
+      </div>
+    </div>
+  </div>
   <div class="bar">
-    <span>Arrows, numpad or WASD to move &middot; SPACE to talk &amp; confirm &middot; / to go back</span>
+    <span class="kbd">Arrows, numpad or WASD to move &middot; SPACE to talk &amp; confirm &middot; / to go back</span>
     <button id="mute" title="Toggle music">Mute (M)</button>
     <button id="restart" title="Erase saved progress and start from the beginning">Restart from beginning</button>
     <a href="../../">all games</a>
@@ -27,12 +54,30 @@
   <script src="sprites.js"></script>
   <script src="game.js"></script>
   <script>
+    const canvas = document.getElementById("game");
     document.getElementById("restart").addEventListener("click", () => {
-      if (confirm("Erase your saved game and start over?")) { window.restoreboundRestart(); document.getElementById("game").focus(); }
+      if (confirm("Erase your saved game and start over?")) { window.restoreboundRestart(); canvas.focus(); }
     });
     document.getElementById("mute").addEventListener("click", (e) => {
-      const m = window.music.toggleMute(); e.target.textContent = m ? "Unmute (M)" : "Mute (M)"; document.getElementById("game").focus();
+      const m = window.music.toggleMute(); e.target.textContent = m ? "Unmute (M)" : "Mute (M)"; canvas.focus();
     });
+    // Touch controls: each on-screen button synthesizes the keyboard event the game already understands.
+    const CODES = { ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", " ": "Space", "/": "Slash" };
+    function fire(type, key) {
+      const ev = new KeyboardEvent(type, { key, code: CODES[key] || key, bubbles: true, cancelable: true });
+      canvas.dispatchEvent(ev); document.dispatchEvent(ev);
+    }
+    document.querySelectorAll("#touch button").forEach((b) => {
+      const key = b.dataset.key; let down = false;
+      const press = (e) => { e.preventDefault(); window.music.unlock(); if (!down) { down = true; fire("keydown", key); } };
+      const release = (e) => { e.preventDefault(); if (down) { down = false; fire("keyup", key); } };
+      b.addEventListener("touchstart", press, { passive: false });
+      b.addEventListener("touchend", release, { passive: false });
+      b.addEventListener("touchcancel", release, { passive: false });
+      b.addEventListener("mousedown", press); b.addEventListener("mouseup", release); b.addEventListener("mouseleave", release);
+    });
+    // a tap anywhere on the stage also counts as the audio-unlock gesture
+    document.getElementById("stage").addEventListener("touchend", () => window.music.unlock(), { passive: true });
   </script>
 </body>
 </html>

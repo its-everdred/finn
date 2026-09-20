@@ -176,10 +176,30 @@ window.music = (() => {
   function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
 
   // Browsers only allow audio after a user gesture: arm on the first one.
-  let armed = false;
+  // iOS additionally (a) needs the context created/resumed synchronously inside
+  // a touchend/click handler and (b) keeps Web Audio under the ringer/silent
+  // switch until a media element has played, so we play a silent clip once to
+  // move the session to the playback category.
+  let armed = false, unlocked = false;
+  const SILENT = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA";
+  function unlock() {
+    if (!ensure()) return;
+    if (ctx.state === "suspended") ctx.resume();
+    if (!unlocked) {
+      unlocked = true;
+      try {
+        const a = new Audio(SILENT); a.setAttribute("playsinline", ""); a.volume = 0.01;
+        const pr = a.play(); if (pr && pr.catch) pr.catch(() => {});
+      } catch (e) { /* ignore */ }
+      // a one-sample buffer through the context itself also counts as a gesture start on iOS
+      try { const b = ctx.createBuffer(1, 1, 22050), src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(0); } catch (e) { /* ignore */ }
+    }
+    start();
+  }
   function arm() {
     if (armed) return; armed = true;
-    ["keydown", "pointerdown", "touchstart"].forEach((ev) => window.addEventListener(ev, () => start(), { once: false, passive: true }));
+    ["keydown", "pointerdown", "touchstart", "touchend", "click"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true }));
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && ctx && ctx.state === "suspended") ctx.resume(); });
   }
   arm();
 
@@ -189,6 +209,7 @@ window.music = (() => {
       current = name;
       if (ctx) { stopTimer(); start(); }
     },
+    unlock,
     stop() { stopTimer(); current = null; },
     toggleMute() {
       muted = !muted;
