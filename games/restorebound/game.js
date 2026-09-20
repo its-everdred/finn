@@ -581,7 +581,7 @@ scene("town", () => {
 
 // ---------------------------------------------------------------- scene: cave
 
-scene("cave", () => {
+scene("cave", (opts = {}) => {
   save("cave");
   music.play("cave");
   // rock
@@ -616,7 +616,15 @@ scene("cave", () => {
   });
 
   const start = segs[0];
-  const player = makePlayer(start.x + 11, CAVE_H - 60);
+  // Coming back from a fight: resume just past where that fight was, not at the mouth.
+  let sx = start.x + 11, sy = CAVE_H - 60;
+  if (opts.resume) {
+    const idx = state.beatBugon ? 8 : Math.min(state.cave, CAVE_ENEMIES.length);
+    const sg = segs[idx] || start;
+    sx = sg.x + 11;
+    sy = opts.lost ? Math.min(CAVE_H - 60, sg.y + 96) : sg.y + 18;
+  }
+  const player = makePlayer(sx, sy);
   player.onUpdate(() => {
     const y = Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16));
     camPos(W / 2, y);
@@ -731,7 +739,7 @@ const ENEMIES = {
       { t: "tried to look scary.", d: [0, 0] },
     ],
     win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open."],
-    next: () => { state.beatBugon = true; state.hp = state.maxHp; state.pp = state.maxPp; go("cave"); },
+    next: () => { state.beatBugon = true; state.hp = state.maxHp; state.pp = state.maxPp; go("cave", { resume: true }); },
   },
   lygon: {
     name: "LYGON", spr: "lygon", hp: 80, weak: "fire", bg: [90, 30, 40], band: [130, 50, 60],
@@ -882,7 +890,7 @@ scene("battle", (which) => {
     state.hp = Math.min(state.maxHp, state.hp + 12);
     state.pp = Math.min(state.maxPp, state.pp + 8);
     if (state.cave % 2 === 0) state.cookies += 1;
-    go("cave");
+    go("cave", { resume: true });
   };
   function hitBoss(dmg, verb) {
     boss.hp -= dmg; music.sfx("hit");
@@ -904,7 +912,7 @@ scene("battle", (which) => {
     if (dmg > 0) { state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); }
     if (state.hp <= 0) {
       say([line, `* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."],
-        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave"); });
+        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", { resume: true, lost: true }); });
     } else say([line], () => busy = false);
   }
 
