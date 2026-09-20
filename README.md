@@ -28,11 +28,15 @@ King shoves you down and runs east. Follow the road — where strays roam and
 **Hollow**, a dungeon of black-purple stone where six of the townsfolk —
 turned by the sorceress **Malagore** — guard the way: three swoopers in the air on
 the sides, three stompers on the floor, fought ground and air by turns. Beat
-them all and the seal opens on Malagore, sitting under the orb.
+them all and the seal opens on Malagore, sitting under the orb — five forms, each
+with its own attack and defence. Just before she falls her minion **Yugrin**
+steals the orb; Pip heals the party and you climb to the summit for the final
+battle (three tiers). Break the orb and the family is whole again.
 
 - Name your hero, your brother, your sister, and your dog
-- Arrows, numpad (8/4/6/2) or WASD to move; `Space` is the main button; `/` is back; `M` mutes
-- Battles: **Slash**, **PSI** (Fire, Ice, Starstorm), **Items** (Cookie, Juice); party members each act in turn, enemies pick a random member to hit, and the party only loses when everyone is down
+- Arrows, numpad (8/4/6/2) or WASD to move; `Space` is the main button; `/` is back (and opens the item menu outside battle); `M` mutes; touch controls on phones
+- Battle turns are minigames: MASH (pink, strobing), timed hits (a fast bar over a centre line — a red STOP sign means wait, the A button means now), sequences, and blocks
+- Battles: **Slash**, **PSI** (Fire, Ice, Starstorm), **Items** (Cookie, Juice, Soda, Bomb; enemies drop them sometimes); party members each act in turn, enemies pick a random member to hit, and the party only loses when everyone is down
 - Progress saves automatically in the browser; **Restart from beginning** wipes it
 - Music is synthesized live with the Web Audio API — funky chiptune, no audio files
 - The hero, the family, and all eight enemies are pixel versions of crayon drawings
