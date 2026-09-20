@@ -124,7 +124,7 @@ function wireTalk(player) {
   }));
 }
 
-function resetCam() { camPos(W / 2, H / 2); }
+function resetCam() { camPos(W / 2, H / 2); if (window.rbNaming) window.rbNaming(false); }
 
 // the cave is one tall map; the camera follows the player up it
 const CAVE_H = 1000;
@@ -214,6 +214,8 @@ scene("title", (opts = {}) => {
   const preview = add([text("", { size: 8, align: "center" }), pos(W / 2, 200), anchor("center"), color(207, 207, 216), z(5)]);
 
   function key() { return prompts[step][0]; }
+  const naming = () => { if (window.rbNaming) window.rbNaming(true, state[key()]); };
+  naming();
   onCharInput((ch) => {
     if (state[key()].length >= 10) return;
     if (/^[a-zA-Z0-9 ]$/.test(ch)) { state[key()] += ch; nameTxt.text = state[key()]; }
@@ -223,8 +225,8 @@ scene("title", (opts = {}) => {
     const defaults = { name: "Finn", bro: "Max", sis: "Lily", dog: "Biscuit" };
     state[key()] = state[key()].trim() || defaults[key()];
     step += 1;
-    if (step >= prompts.length) { go("upstairs"); return; }
-    q.text = prompts[step][1]; nameTxt.text = state[key()];
+    if (step >= prompts.length) { if (window.rbNaming) window.rbNaming(false); go("upstairs"); return; }
+    q.text = prompts[step][1]; nameTxt.text = state[key()]; naming();
     preview.text = `${state.name}` + (step > 1 ? `, ${state.bro}` : "") + (step > 2 ? `, ${state.sis}` : "");
   });
 });

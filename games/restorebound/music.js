@@ -180,25 +180,35 @@ window.music = (() => {
   // a touchend/click handler and (b) keeps Web Audio under the ringer/silent
   // switch until a media element has played, so we play a silent clip once to
   // move the session to the playback category.
-  let armed = false, unlocked = false;
-  const SILENT = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA";
+  let armed = false, keeper = null;
+  // one second of 8-bit silence as a WAV, built in memory
+  function silentWav() {
+    const rate = 8000, n = rate, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + n, true); str(8, "WAVE"); str(12, "fmt "); v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate, true);
+    v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, "data"); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
   function unlock() {
     if (!ensure()) return;
     if (ctx.state === "suspended") ctx.resume();
-    if (!unlocked) {
-      unlocked = true;
+    if (!keeper) {
+      // iOS keeps Web Audio under the ringer switch until a media element is *playing*;
+      // a looping silent clip, kept referenced, moves the session to playback and holds it there.
       try {
-        const a = new Audio(SILENT); a.setAttribute("playsinline", ""); a.volume = 0.01;
-        const pr = a.play(); if (pr && pr.catch) pr.catch(() => {});
-      } catch (e) { /* ignore */ }
-      // a one-sample buffer through the context itself also counts as a gesture start on iOS
+        keeper = new Audio(silentWav()); keeper.loop = true; keeper.setAttribute("playsinline", ""); keeper.muted = false;
+        const pr = keeper.play(); if (pr && pr.catch) pr.catch(() => { keeper = null; });
+      } catch (e) { keeper = null; }
       try { const b = ctx.createBuffer(1, 1, 22050), src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(0); } catch (e) { /* ignore */ }
     }
     start();
   }
   function arm() {
     if (armed) return; armed = true;
-    ["keydown", "pointerdown", "touchstart", "touchend", "click"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true }));
+    // capture phase, so a canvas that stops propagation cannot hide the gesture from us
+    ["keydown", "pointerdown", "pointerup", "touchstart", "touchend", "click"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true, capture: true }));
     document.addEventListener("visibilitychange", () => { if (!document.hidden && ctx && ctx.state === "suspended") ctx.resume(); });
   }
   arm();
@@ -210,6 +220,17 @@ window.music = (() => {
       if (ctx) { stopTimer(); start(); }
     },
     unlock,
+    // diagnostics: is the context running, is a track scheduled, and is there signal on the master bus?
+    debug() {
+      const out = { hasCtx: !!ctx, ctxState: ctx ? ctx.state : null, current, timerRunning: !!timer, muted, masterGain: master ? master.gain.value : null, rms: null, sampleRate: ctx ? ctx.sampleRate : null };
+      if (ctx && master) {
+        if (!this._an) { this._an = ctx.createAnalyser(); this._an.fftSize = 2048; master.connect(this._an); }
+        const buf = new Float32Array(this._an.fftSize); this._an.getFloatTimeDomainData(buf);
+        let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        out.rms = Math.sqrt(sum / buf.length);
+      }
+      return out;
+    },
     stop() { stopTimer(); current = null; },
     toggleMute() {
       muted = !muted;
