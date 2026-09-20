@@ -757,7 +757,12 @@ window.music = (() => {
   function schedule() {
     const tr = T[current]; if (!tr || !trackGain) return;
     const spb = 60 / tr.bpm / 4; // seconds per 16th
-    while (nextTime < ctx.currentTime + LOOKAHEAD) {
+    if (!(spb > 0) || !isFinite(spb)) return; // a track with no tempo would never advance the clock
+    // After the tab was in the background (timers paused, the audio clock not) the scheduler is
+    // far behind. Do not build every missed note at once: skip ahead and carry on from here.
+    if (ctx.currentTime - nextTime > 0.5) nextTime = ctx.currentTime + 0.02;
+    let guard = 0;
+    while (nextTime < ctx.currentTime + LOOKAHEAD && guard++ < 64) {
       if (step >= tr.len) step = tr.loopStart || 0;
       const i = step;
       const t = nextTime + ((i % 2 === 1) ? spb * tr.swing : 0);
