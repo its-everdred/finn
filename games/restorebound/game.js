@@ -31,7 +31,7 @@ const START = {
   cave: 0, beatBugon: false, party: [], branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
   beatLygon: false, hollow: 0, beatMalva: false,
   // after Lygon: the walk home, the trouble next door, the King, the friends
-  homeAgain: false, kingFled: false, friends: false, partyHp: {}, rockets: 3, seenMess: false, seenHome: false,
+  homeAgain: false, kingFled: false, friends: false, partyHp: {}, rockets: 3, seenMess: false, seenHome: false, seenMechs: [],
   // the pantry, and the summit after the Hollow: Yugrin runs off with the orb
   soda: 2, bombs: 0, yugrinHasOrb: false, beatYugrin: false,
 };
@@ -56,7 +56,7 @@ function migrate(saved) {
   st.cave = Math.min(Math.max(0, st.cave | 0), CAVE_ENEMIES.length);
   st.hollow = Math.min(Math.max(0, st.hollow | 0), HOLLOW_ORDER.length);
   st.beatLygon = !!st.beatLygon; st.beatMalva = !!st.beatMalva;
-  st.homeAgain = !!st.homeAgain; st.kingFled = !!st.kingFled; st.friends = !!st.friends; st.seenMess = !!st.seenMess; st.seenHome = !!st.seenHome;
+  st.homeAgain = !!st.homeAgain; st.kingFled = !!st.kingFled; st.friends = !!st.friends; st.seenMess = !!st.seenMess; st.seenHome = !!st.seenHome; if (!Array.isArray(st.seenMechs)) st.seenMechs = [];
   st.party = Array.isArray(st.party) ? st.party.filter((n) => PARTY_NAMES.includes(n)) : [];
   st.partyHp = st.partyHp && typeof st.partyHp === "object" ? { ...st.partyHp } : {};
   st.rockets = Math.max(0, st.rockets | 0);
@@ -95,7 +95,7 @@ function say(lines, onDone) {
   let i = 0;
   add([rect(W - 16, 60, { radius: 3 }), pos(8, H - 68), color(20, 20, 36), outline(2, rgb(232, 232, 240)), fixed(), z(100), "dialog"]);
   const txt = add([text("", { size: 8, width: W - 36, lineSpacing: 3 }), pos(18, H - 58), color(232, 232, 240), fixed(), z(101), "dialog"]);
-  const cue = add([text("v", { size: 8 }), pos(W - 22, H - 22), color(242, 208, 92), fixed(), z(101), "dialog"]);
+  const cue = arrowObj("down", W - 18, H - 18, 4, [242, 208, 92], [fixed(), z(101), "dialog"]);
   cue.onUpdate(() => { cue.hidden = Math.floor(time() * 3) % 2 === 0; });
 
   let shown = 0, full = lines[0], typing = true;
@@ -156,7 +156,7 @@ function openMenu() {
   add([rect(W - 16, 76, { radius: 3 }), pos(8, H - 84), color(20, 20, 36), outline(2, rgb(232, 232, 240)), fixed(), z(100), "menu"]);
   const head = add([text("", { size: 8 }), pos(18, H - 76), color(242, 208, 92), fixed(), z(101), "menu"]);
   const lines = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(30, H - 62 + i * 13), color(232, 232, 240), fixed(), z(101), "menu"]));
-  const cur = add([text(">", { size: 8 }), pos(18, H - 62), color(242, 208, 92), fixed(), z(101), "menu"]);
+  const cur = arrowObj("right", 22, H - 58, 4, [242, 208, 92], [fixed(), z(101), "menu"]);
   const note = add([text("", { size: 8 }), pos(W - 18, H - 76), anchor("topright"), color(207, 207, 216), fixed(), z(101), "menu"]);
   let noteUntil = 0;
   function flash(t) { note.text = t; noteUntil = time() + 1.6; }
@@ -230,6 +230,14 @@ function fullHeal() {
 }
 
 function heroSprite() { return state.giantSword ? "hero_giant" : state.hasSword ? "hero_sword" : "hero"; }
+// A real arrow (shaft + head) as one polygon, `size` = half its length. Points left/right/up/down.
+// Extra comps (z, fixed, tags) go in `extra`; the object supports color, scale, opacity, hidden like text did.
+const ARROW_ANGLE = { right: 0, down: 90, left: 180, up: 270 };
+function arrowObj(dir, x, y, size, col, extra = []) {
+  const s = size, h = s * 0.55, w = s * 0.34;
+  const pts = [vec2(-s, -w), vec2(s - h, -w), vec2(s - h, -h * 1.1), vec2(s, 0), vec2(s - h, h * 1.1), vec2(s - h, w), vec2(-s, w)];
+  return add([polygon(pts), pos(x, y), rotate(ARROW_ANGLE[dir] || 0), color(...col), opacity(1), ...extra]);
+}
 // 8-direction facings. sprites.js may carry `<base>_<dir>` (d u l r dl dr ul ur) drawn on the
 // same canvas and foot anchor as the base; where a facing is not drawn yet, the base stands in.
 // Hits are cached; a miss is re-checked each call so art that lands later is picked up.
@@ -375,7 +383,7 @@ scene("title", (opts = {}) => {
     let pick = 0;
     add([text(`Welcome back, ${saved.state.name}.`, { size: 8 }), pos(W / 2, 112), anchor("center"), color(232, 232, 240), z(5)]);
     const opts2 = ["Continue", "New Game"].map((t, i) => add([text(t, { size: 10 }), pos(W / 2 - 40 + i * 80, 140), anchor("center"), color(232, 232, 240), z(5)]));
-    const cur = add([text(">", { size: 10 }), pos(0, 140), anchor("center"), color(242, 208, 92), z(6)]);
+    const cur = arrowObj("right", 0, 140, 5, [242, 208, 92], [z(6)]);
     cur.onUpdate(() => { cur.pos.x = opts2[pick].pos.x - opts2[pick].width / 2 - 8; opts2.forEach((o, i) => o.color = i === pick ? rgb(242, 208, 92) : rgb(232, 232, 240)); });
     add([text("left / right, then SPACE", { size: 8 }), pos(W / 2, 168), anchor("center"), color(138, 138, 153), z(5)]);
     ["left", "a", "4", "right", "d", "6"].forEach((k) => onKeyPress(k, () => { pick = 1 - pick; music.sfx("move"); }));
@@ -450,7 +458,7 @@ scene("upstairs", () => {
   // stairs down
   add([rect(30, 28), pos(14, H - 36), color(110, 80, 50)]);
   for (let i = 0; i < 5; i++) add([rect(30, 1), pos(14, H - 34 + i * 5), color(70, 50, 30)]);
-  add([text("v", { size: 8 }), pos(29, H - 44), anchor("center"), color(242, 208, 92)]);
+  arrowObj("down", 29, H - 44, 4, [242, 208, 92], []);
   add([rect(30, 6), pos(14, H - 12), area(), "stairs"]);
 
   const player = makePlayer(60, 110);
@@ -645,11 +653,11 @@ scene("downstairs", (opts) => {
   add([rect(4, 4), pos(W / 2 + 12, H - 7), color(242, 208, 92)]);
   const seal = add([rect(48, 12), pos(W / 2 - 24, H - 12), color(199, 123, 214), opacity(0.4), z(3)]);
   seal.onUpdate(() => { seal.opacity = state.hasKey ? 0 : 0.3 + 0.25 * Math.abs(Math.sin(time() * 4)); });
-  add([text("v", { size: 8 }), pos(W / 2, H - 16), anchor("center"), color(242, 208, 92)]);
+  arrowObj("down", W / 2, H - 16, 4, [242, 208, 92], []);
   // stairs up
   add([rect(30, 28), pos(14, 40), color(110, 80, 50)]);
   for (let i = 0; i < 5; i++) add([rect(30, 1), pos(14, 42 + i * 5), color(70, 50, 30)]);
-  add([text("^", { size: 8 }), pos(29, 72), anchor("center"), color(242, 208, 92)]);
+  arrowObj("up", 29, 72, 4, [242, 208, 92], []);
   add([rect(30, 6), pos(14, 40), area(), "stairsup"]);
   // furniture
   wall(60, 120, 60, 30); add([rect(56, 4), pos(62, 118), color(170, 130, 90)]);
@@ -796,7 +804,7 @@ scene("town", (opts) => {
   if (state.kingFled) {
     wall(W - 6, 0, 6, H - 48); wall(W - 6, H - 14, 6, 14);
     add([rect(6, 34), pos(W - 6, H - 48), color(214, 190, 140), z(1)]);
-    add([text(">", { size: 8 }), pos(W - 12, H - 34), anchor("center"), color(242, 208, 92), z(2)]);
+    arrowObj("right", W - 12, H - 34, 4, [242, 208, 92], [z(2)]);
     add([rect(6, 34), pos(W - 6, H - 48), area(), "east"]);
   } else wall(W - 6, 0, 6, H);
   // purple glow over the hill
@@ -1224,7 +1232,7 @@ scene("cave", (opts = {}) => {
   add([rect(6, 70), pos(beamX - 3, tsg.y + 15), color(...BT.rim), z(1.4)]);
   add([rect(2, 70), pos(beamX - 1, tsg.y + 15), color(255, 244, 200), z(1.45)]);
   add([sprite("post"), pos(beamX, tsg.y + 12), anchor("center"), z(2.3)]); add([sprite("post"), pos(beamX, tsg.y + 88), anchor("center"), z(2.3)]);
-  add([text("^", { size: 8 }), pos(beamX, tsg.y + 96), anchor("center"), color(242, 208, 92), z(2.3)]);
+  arrowObj("up", beamX, tsg.y + 96, 4, [242, 208, 92], [z(2.3)]);
   add([rect(pit.w + 4, pit.h + 4), pos(pit.x - 2, pit.y - 2), color(...BT.rim), z(0.5)]);
   netFloor(pit.x, pit.y, pit.w, pit.h);
   add([sprite("ladder"), pos(pit.x + 4, pit.y + 2), anchor("topleft"), z(2.2)]);
@@ -1464,7 +1472,7 @@ scene("town2", (opts) => {
   // west edge: back down the road to town
   wall(0, 0, 6, H - 48); wall(0, H - 14, 6, 14);
   add([rect(6, 34), pos(0, H - 48), area(), "west"]);
-  add([text("<", { size: 8 }), pos(12, H - 34), anchor("center"), color(242, 208, 92), z(2)]);
+  arrowObj("left", 12, H - 34, 4, [242, 208, 92], [z(2)]);
   // purple glow spilling down from the hill
   const glow = add([rect(W, 80), pos(0, 0), color(199, 123, 214), opacity(0.14), z(0)]);
   glow.onUpdate(() => { glow.opacity = 0.1 + 0.1 * Math.abs(Math.sin(time() * 1.7)); });
@@ -1703,14 +1711,14 @@ scene("hollow", (opts) => {
     // her chair is empty; behind it the rock has opened onto the mountain
     add([rect(44, 30), pos(BOSS.x - 22, BOSS.y - 6), color(28, 18, 44), z(3)]); add([rect(48, 6), pos(BOSS.x - 24, BOSS.y + 22), color(22, 14, 36), z(3)]);
     add([rect(40, 30), pos(BOSS.x - 20, 0), color(199, 123, 214), opacity(0.35), z(3)]);
-    add([text("^", { size: 8 }), pos(BOSS.x, 34), anchor("center"), color(242, 208, 92), z(3)]);
+    arrowObj("up", BOSS.x, 34, 4, [242, 208, 92], [z(3)]);
     add([rect(40, 12), pos(BOSS.x - 20, 24), area(), "hsummit"]);
     player.onCollide("hsummit", () => { if (!dialogOpen) go("summit"); });
   }
 
   // the bottom of the hall is the way out, back to the east town
   add([rect(60, 12), pos(W / 2 - 30, HOLLOW_H - 14), area(), "hexit"]);
-  add([text("v", { size: 8 }), pos(W / 2, HOLLOW_H - 22), anchor("center"), color(242, 208, 92), z(3)]);
+  arrowObj("down", W / 2, HOLLOW_H - 22, 4, [242, 208, 92], [z(3)]);
   player.onCollide("hexit", () => { if (!dialogOpen) go("town2", { from: "north" }); });
   hud();
   const left = HOLLOW_ORDER.length - state.hollow;
@@ -1746,7 +1754,7 @@ scene("summit", (opts) => {
   wall(0, 0, W, 112); wall(0, 0, 6, H); wall(W - 6, 0, 6, H);
   wall(0, H - 26, W / 2 - 24, 26); wall(W / 2 + 24, H - 26, W / 2 - 24, 26);
   add([rect(48, 26), pos(W / 2 - 24, H - 26), color(70, 64, 82), z(2)]);
-  add([text("v", { size: 8 }), pos(W / 2, H - 14), anchor("center"), color(242, 208, 92), z(3)]);
+  arrowObj("down", W / 2, H - 14, 4, [242, 208, 92], [z(3)]);
   add([rect(48, 6), pos(W / 2 - 24, H - 6), area(), "down"]);
   [[30, 150], [270, 130], [60, 200], [250, 196]].forEach(([x, y]) => { add([sprite("rock"), pos(x, y), anchor("topleft"), z(3 + y / 1000)]); wall(x + 2, y + 8, 14, 5); });
 
@@ -1789,7 +1797,7 @@ scene("house2", (opts) => {
   const windows = [{ x: 60, y: 8, w: 30, h: 22 }, { x: W - 90, y: 8, w: 30, h: 22 }];
   windows.forEach(drawWindow);
   add([rect(44, 8), pos(W / 2 - 22, H - 8), color(60, 40, 20)]);
-  add([text("v", { size: 8 }), pos(W / 2, H - 16), anchor("center"), color(242, 208, 92)]);
+  arrowObj("down", W / 2, H - 16, 4, [242, 208, 92], []);
   // a couch, a bread shelf, a table that has been knocked about
   wall(40, 150, 56, 22, [150, 90, 90]); add([rect(52, 4), pos(42, 148), color(180, 110, 110)]);
   wall(W - 80, 60, 60, 24, [140, 100, 60]);
@@ -1928,8 +1936,8 @@ scene("road", (opts) => {
   wall(0, 0, ROAD_W, 70); wall(0, H - 10, ROAD_W, 10);
   wall(0, 70, 6, RY - 70); wall(0, RY + RH, 6, H - RY - RH); add([rect(6, RH), pos(0, RY), area(), opacity(0), "west"]);
   wall(ROAD_W - 6, 70, 6, RY - 70); wall(ROAD_W - 6, RY + RH, 6, H - RY - RH); add([rect(6, RH), pos(ROAD_W - 6, RY), area(), opacity(0), "east"]);
-  add([text("<", { size: 8 }), pos(12, RY + 20), anchor("center"), color(242, 208, 92), z(2)]);
-  add([text(">", { size: 8 }), pos(ROAD_W - 12, RY + 20), anchor("center"), color(242, 208, 92), z(2)]);
+  arrowObj("left", 12, RY + 20, 4, [242, 208, 92], [z(2)]);
+  arrowObj("right", ROAD_W - 12, RY + 20, 4, [242, 208, 92], [z(2)]);
   // obstacles: fixed, so the map can be learned. Some sit right on the road.
   const DECOR = [
     ["tree", 70, 84], ["tree", 130, 200], ["bush", 200, 122], ["rock", 262, 162], ["tree", 310, 92], ["rock2", 380, 128], ["bush", 420, 204],
@@ -2311,13 +2319,16 @@ const CUES = {
 };
 function miniCue(kind, col, then) {
   const tag = "minicue", t0 = time(), cue = CUES[kind] || CUES.timing;
+  const fresh = markMechSeen(kind === "timing" ? "wait-bars" : kind);
+  if (fresh) { const nw = add([text("NEW MOVE!", { size: 10 }), pos(W / 2, 150), anchor("center"), color(...C_INK), z(33), tag]); nw.onUpdate(() => { nw.scale = vec2(1 + 0.1 * Math.abs(Math.sin(time() * 6))); }); }
   add([rect(210, 42, { radius: 4 }), pos(W / 2, 176), anchor("center"), color(20, 20, 36), outline(2, rgb(...col)), z(32), tag]);
   const mash = cue.btn === "mash", ccol = mash ? C_MASH : col;
   const txt = add([text(cue.label, { size: cue.label.length > 8 ? 12 : 18 }), pos(W / 2 + 10, cue.preview ? 169 : 172), anchor("center"), color(...ccol), opacity(1), z(33), tag]);
   const btn = add([circle(12), pos(W / 2 - 74, 176), color(...ccol), outline(2, rgb(20, 20, 36)), opacity(1), z(33), tag]);
   if (mash) miniStrobe(tag);
   if (cue.btn === "wait") miniStop(W / 2 - 74, 176, tag);
-  const a = add([text(cue.btn === "arrows" ? "+" : "A", { size: cue.btn === "arrows" ? 16 : 13 }), pos(W / 2 - 74, 177), anchor("center"), color(20, 20, 36), opacity(1), z(34), tag]);
+  const a = cue.btn === "arrows" ? arrowObj("right", W / 2 - 74, 176, 7, [20, 20, 36], [z(34), tag])
+    : add([text("A", { size: 13 }), pos(W / 2 - 74, 177), anchor("center"), color(20, 20, 36), opacity(1), z(34), tag]);
   btn.onUpdate(() => {
     const t = time() - t0;
     if (cue.btn === "mash") { const sc = 1 + 0.35 * Math.abs(Math.sin(t * 22)); btn.scale = vec2(sc); a.scale = vec2(sc); txt.color = Math.sin(t * 30) > 0 ? rgb(...C_MASH) : rgb(255, 255, 255); }
@@ -2331,7 +2342,7 @@ function miniCue(kind, col, then) {
   const track = () => add([rect(64, 5), pos(px, py), color(...C_GREY), z(33), tag]);
   const zone = (x, w, c) => add([rect(w, 5), pos(px + x, py), color(...(c || col)), z(34), tag]);
   const line = (x) => add([rect(2, 9), pos(px + x, py - 2), color(...C_INK), z(35), tag]);
-  const glyph = (s, x, size = 8, c = col) => add([text(s, { size }), pos(px + x, py + 2), anchor("center"), color(...c), z(35), tag]);
+  const glyph = (s, x, size = 8, c = col) => arrowObj({ "<": "left", ">": "right", "^": "up", "v": "down" }[s], px + x, py + 2, size * 0.5, c, [z(35), tag]);
   switch (cue.preview) {
     case "bars": track(); zone(23, 18); line(31); break;
     case "line": track(); zone(8, 14); zone(42, 14); line(48); glyph("<", 70, 7, C_INK); break;
@@ -2344,7 +2355,7 @@ function miniCue(kind, col, then) {
     case "dodge": glyph("<", 8, 12); glyph(">", 56, 12); break;
   }
   music.sfx("move");
-  wait(0.8, () => { destroyAll(tag); then(); });
+  wait(fresh ? 1.9 : 0.8, () => { destroyAll(tag); then(); });
 }
 
 // MASH: every press fills the bar a little; the counter bounces. Resolves with the fill ratio (0..1).
@@ -2561,8 +2572,8 @@ function miniWaitBoth(o, done) {
   miniTrack();
   const bar = add([rect(bw * TRACK.w, TRACK.h - 2), pos(0, TRACK.y + 1), anchor("top"), color(...col), z(28), MINI, "minizone"]);
   const line = miniMarker();
-  add([text("<", { size: 8 }), pos(TRACK.x + TRACK.w + 6, TRACK.y - 8), anchor("center"), color(...C_INK), z(29), MINI]);
-  add([text(">", { size: 8 }), pos(TRACK.x - 6, TRACK.y - 8), anchor("center"), color(...col), z(29), MINI]);
+  arrowObj("left", TRACK.x + TRACK.w + 6, TRACK.y - 8, 4, C_INK, [z(29), MINI]);
+  arrowObj("right", TRACK.x - 6, TRACK.y - 8, 4, col, [z(29), MINI]);
   const wp = miniWaitPrompt(col, pre);
   let t = -ARM, over = false;
   const lf = () => { const k = Math.max(0, t) / dur; return 1 - (k - Math.floor(k)); };
@@ -2692,7 +2703,7 @@ function miniSimon(o, done) {
   miniTrack();
   const prompt = miniPrompt(pre + "WATCH...", W / 2 - 40, 163, 14, col); const stop = miniStop(); const btn = miniButton(col, 34, 163, "+"); btn.forEach((b) => b.hidden = true);
   const x0 = TRACK.x + TRACK.w / 2 - (n - 1) * 20;
-  const glyphs = seq.map((d, i) => add([text(DIR_GLYPH[d], { size: 12 }), pos(x0 + i * 40, TRACK.y + TRACK.h / 2 + 1), anchor("center"), color(...col), z(30), MINI]));
+  const glyphs = seq.map((d, i) => arrowObj(d, x0 + i * 40, TRACK.y + TRACK.h / 2, 8, col, [z(30), MINI]));
   const clock = add([rect(TRACK.w - 2, 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), z(28), MINI]);
   let phase = "show", k = 0, right = 0, over = false, t = 0;
   clock.onUpdate(() => { t += dt(); if (phase === "repeat") clock.width = (TRACK.w - 2) * Math.max(0, 1 - (t - show) / (limit - show)); });
@@ -2701,7 +2712,7 @@ function miniSimon(o, done) {
   const offs = DIRS4.map((d) => miniKeys(DIR_KEYS[d], () => {
     if (over || phase !== "repeat") return;
     const g = glyphs[k];
-    if (d === seq[k]) { right += 1; music.sfx("select"); g.text = DIR_GLYPH[d]; g.color = rgb(...C_GREEN); g.scale = vec2(1.5); k += 1; if (k >= n) finish(); }
+    if (d === seq[k]) { right += 1; music.sfx("select"); g.color = rgb(...C_GREEN); g.scale = vec2(1.5); k += 1; if (k >= n) finish(); }
     else wrong(g.pos.x, g.pos.y - 14);
   }));
   wait(show, () => {
@@ -2757,7 +2768,7 @@ function miniDodge(o, done) {
     if (over) return;
     if (i >= rounds) return finish();
     dir = choose(["left", "right"]); t = i === 0 ? -0.3 : -0.1;
-    const a = add([text(DIR_GLYPH[dir], { size: 22 }), pos(dir === "left" ? TRACK.x + 30 : TRACK.x + TRACK.w - 30, TRACK.y + TRACK.h / 2 + 1), anchor("center"), color(...col), z(30), scale(1), MINI, "minimarker"]);
+    const a = arrowObj(dir, dir === "left" ? TRACK.x + 30 : TRACK.x + TRACK.w - 30, TRACK.y + TRACK.h / 2, 13, col, [z(30), scale(1), MINI, "minimarker"]);
     arrow = a;
     a.onUpdate(() => {
       if (arrow !== a) return; // this arrow has been answered; it only lingers to show its colour
@@ -2786,6 +2797,43 @@ function miniDodge(o, done) {
 // every minigame by name. run(o, done): o carries speed, zone, zones, keys, hot, prefix, fakeouts, spr;
 // done gets "perfect" | "good" | "miss", or 0..1 when `ratio` is set. mash / sequence / wait / block keep
 // their own branches in the battle scene (their damage maths predates this table).
+// Mechanics arrive one at a time as the game goes on. MASH is the first and stays the most common;
+// 1-4 are the easy ones; the rest only turn up in boss fights, and never two hard ones in a row.
+const MECH_ORDER = ["mash", "wait-bars", "wait-line", "wait-both", "mash-wait-mash", "pulse", "catch", "hold", "dodge", "simon"];
+const MECH_EASY = new Set(["mash", "wait-bars", "wait-line", "wait-both"]);
+const BOSSES = new Set(["bugon", "lygon", "king", "malva", "yugrin"]);
+function unlockedMechs(boss) {
+  let k = 1;                        // mash from the very first battle
+  if (state.cave >= 2) k = 2;       // the timed bar, a few critters in
+  if (state.cave >= 4) k = 3;       // the racing line
+  if (state.beatBugon) k = 4;       // both moving
+  if (state.beatLygon) k = 5;       // mash-wait-mash
+  if (state.kingFled) k = 6;        // pulse
+  if (state.hollow >= 2) k = 7;     // catch
+  if (state.hollow >= 4) k = 8;     // hold
+  if (state.beatMalva) k = 9;       // dodge
+  if (state.beatYugrin) k = 10;     // simon (new game plus)
+  if (boss) k = Math.min(MECH_ORDER.length, k + 1); // a boss brings the next one with it
+  return MECH_ORDER.slice(0, k);
+}
+let lastMech = "mash";
+function pickMech(boss) {
+  const pool = unlockedMechs(boss);
+  const easy = pool.filter((m) => m !== "mash" && MECH_EASY.has(m)), hard = pool.filter((m) => !MECH_EASY.has(m));
+  // the next mechanic this fight may introduce: hard ones only arrive in a boss fight
+  const intro = pool.filter((m) => boss || MECH_EASY.has(m)).find((m) => !state.seenMechs.includes(m));
+  let name;
+  if (!MECH_EASY.has(lastMech)) name = "mash";                       // after a hard one, back to mash
+  else if (intro) name = intro;                                        // introduce the new one
+  else if (Math.random() < 0.55 || !easy.length) name = "mash";
+  else if (boss && hard.length && Math.random() < 0.5) name = choose(hard);
+  else name = choose(easy);
+  if (!boss && !MECH_EASY.has(name)) name = "mash";
+  lastMech = name;
+  return name;
+}
+function markMechSeen(name) { if (MECH_ORDER.includes(name) && !state.seenMechs.includes(name)) { state.seenMechs.push(name); return true; } return false; }
+
 const MINIS = {
   timing: { run: miniTiming },
   "wait-bars": { run: miniTiming },
@@ -2844,7 +2892,7 @@ scene("battle", (which, bopts = {}) => {
 
   // ---- the enemies
   const BY = 80; // they stand a little high so the minigame strip fits under their HP bars
-  const foes = defs.map((d, i) => ({ def: d, name: d.name, hp: Math.round(d.hp * hpScale), maxHp: Math.round(d.hp * hpScale), frozen: 0, alive: true, defTurn: 0,
+  const foes = defs.map((d, i) => ({ def: d, key: Object.keys(ENEMIES).find((k) => ENEMIES[k] === d) || which, name: d.name, hp: Math.round(d.hp * hpScale), maxHp: Math.round(d.hp * hpScale), frozen: 0, alive: true, defTurn: 0,
     mini: d.mini || { attack: "timing", defend: ["block"] }, x: defs.length === 1 ? W / 2 : W / 2 - 64 + i * 128, phaseIdx: 0 }));
   let busy = true, cur = null, actor = 0, targeting = null, defending = null, pending = null;
   let menu = 0, sub = null, subIdx = 0, targetIdx = 0, allyIdx = 0;
@@ -2933,8 +2981,8 @@ scene("battle", (which, bopts = {}) => {
   }
   buildRow();
   // a blue arrow says who the enemy is coming for; a gold one is your own pick (enemy or ally)
-  const tArrow = add([text("v", { size: 8 }), pos(0, 0), anchor("center"), color(...C_BLUE), z(40), "targetarrow"]);
-  const pArrow = add([text("v", { size: 10 }), pos(0, 0), anchor("center"), color(...C_GOLD), z(40), "pickarrow"]);
+  const tArrow = arrowObj("down", 0, 0, 4, C_BLUE, [z(40), "targetarrow"]);
+  const pArrow = arrowObj("down", 0, 0, 5, C_GOLD, [z(40), "pickarrow"]);
   onUpdate(() => {
     tArrow.hidden = !targeting;
     if (targeting) tArrow.pos = vec2(targeting.cx, PY - 3 - Math.abs(Math.sin(time() * 8)) * 3);
@@ -2950,7 +2998,7 @@ scene("battle", (which, bopts = {}) => {
   // ---- the menu
   const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
   const slots = [0, 1, 2, 3, 4, 5].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
-  const cursor = add([text(">", { size: 8 }), pos(0, 0), color(242, 208, 92), z(22)]);
+  const cursor = arrowObj("right", 4, 4, 4, [242, 208, 92], [z(22)]);
   const who = add([text("", { size: 8 }), pos(130, PY - 10), color(232, 232, 240), z(22)]);
   const hint = add([text("", { size: 8 }), pos(310, PY - 10), anchor("topright"), color(207, 207, 216), z(22)]);
 
@@ -3046,8 +3094,7 @@ scene("battle", (which, bopts = {}) => {
   const tune = () => foes.find((f) => f.alive) || foes[0];
   // which minigame decides the power of this action, per the enemy's tuning
   function attackKind(action) {
-    const a = tune().mini.attack || "timing";
-    return typeof a === "string" ? a : (a[action] || "timing");
+    return pickMech(BOSSES.has(tune().key) || !!tune().mini.phases);
   }
   // a power minigame for `label`; done(multiplier, grade)
   function power(kind, label, done, o = {}) {
@@ -3388,15 +3435,16 @@ scene("battle", (which, bopts = {}) => {
   }
   function pickDefense(f) {
     const ph = currentPhase(f);
+    let d;
     if (ph) {
-      const d = { ...ph };
+      d = { ...ph };
       if (Array.isArray(d.defend)) d.defend = d.defend[f.defTurn % d.defend.length];
       if (d.flurry === "alt") d.flurry = f.defTurn % 2 === 0;
-      return d;
-    }
-    const list = f.mini.defend || ["block"];
-    const name = f.mini.pick === "cycle" ? list[f.defTurn % list.length] : f.mini.pick === "random" ? choose(list) : list[0];
-    return { defend: name, fakeouts: f.mini.fakeouts || 0, zones: f.mini.blockZones || 1 };
+    } else d = { defend: "block", fakeouts: f.mini.fakeouts || 0, zones: f.mini.blockZones || 1 };
+    // the pacing picks the mechanic; the enemy only tunes it. A flurry is always a mash.
+    const m = d.flurry ? "mash" : pickMech(BOSSES.has(f.key) || !!f.mini.phases);
+    d.defend = m === "mash" ? "mashB" : m === "wait-bars" ? (Math.random() < 0.5 && (d.fakeouts || f.mini.fakeouts) ? "wait" : "block") : m;
+    return d;
   }
   // a short warning in the track strip, then the minigame begins
   function telegraph(txt, then, col = C_BLUE) {
