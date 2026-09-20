@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crashdown</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0b14; color: #e8e8f0; font-family: monospace; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; outline: none; max-width: 100vw; max-height: 100vh; }
+  .hint { font-size: 12px; opacity: .6; text-align: center; padding: 0 12px; }
+  a { color: #8fd3ff; }
+</style>
+</head>
+<body>
+  <canvas id="game" tabindex="0"></canvas>
+  <div class="hint">Arrows, numpad or WASD to move &middot; SPACE to talk &amp; confirm &middot; / to go back &middot; <a href="../../">all games</a></div>
+  <script src="https://unpkg.com/kaboom@3000.1.17/dist/kaboom.js"></script>
+  <script src="sprites.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
