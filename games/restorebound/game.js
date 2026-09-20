@@ -713,8 +713,7 @@ scene("cave", (opts = {}) => {
   segs.forEach((sg, i) => {
     if (i % 2) return;
     const t = add([rect(3, 6), pos(sg.x - 8, sg.y + 40), color(255, 160, 64), z(2)]);
-    const glow = add([rect(40, 40), pos(sg.x - 26, sg.y + 22), color(255, 190, 90), opacity(0.08), z(0)]);
-    t.onUpdate(() => { t.color = rgb(255, 130 + rand(0, 60), 40); glow.opacity = 0.06 + rand(0, 0.04); });
+    t.onUpdate(() => { t.color = rgb(255, 130 + rand(0, 60), 40); });
   });
 
   const start = segs[0];
@@ -974,6 +973,7 @@ const PSI = [
 
 const TRACK = { x: 40, y: 173, w: 240, h: 11 };
 const MINI = "minigame";
+const C_BLUE = [96, 168, 255];
 const C_INK = [232, 232, 240], C_GOLD = [242, 208, 92], C_GREEN = [79, 176, 106], C_TEAL = [51, 199, 193], C_RED = [224, 69, 63], C_GREY = [138, 138, 153];
 
 // the press that closed the text box or the menu is still in flight when a minigame starts; it does not count
@@ -984,6 +984,12 @@ function miniKeys(keys, fn) {
 }
 function miniPrompt(txt, x, y, size, col) {
   return add([text(txt, { size }), pos(x, y), anchor("center"), color(...col), z(30), MINI]);
+}
+// a big round button next to the prompt: gold on your turn, blue on theirs. Reads without words.
+function miniButton(col, x = 34, y = 163) {
+  add([circle(11), pos(x, y), color(...col), outline(2, rgb(20, 20, 36)), z(30), MINI, "minibtn"]);
+  const a = add([text("A", { size: 12 }), pos(x, y + 1), anchor("center"), color(20, 20, 36), z(31), MINI]);
+  a.onUpdate(() => { a.scale = vec2(1 + 0.15 * Math.abs(Math.sin(time() * 8))); });
 }
 function miniTrack() {
   return add([rect(TRACK.w, TRACK.h), pos(TRACK.x, TRACK.y), color(20, 20, 36), outline(1, rgb(...C_INK)), z(26), MINI]);
@@ -1005,13 +1011,39 @@ function miniResult(label) {
 function gradeOf(ratio) { return ratio >= 1 ? "perfect" : ratio >= 0.5 ? "good" : "miss"; }
 function gradeLabel(g) { return g === "perfect" ? "PERFECT!" : g === "good" ? "GOOD" : g === "early" ? "TOO EARLY!" : "MISS"; }
 
+// READY: announces the mechanic before it starts, so a player coming off a WAIT turn is not
+// caught flat-footed by a MASH. The button acts it out: rapid pulses for mash, single crisp
+// taps for timing, dimmed with dots for wait. 0.8 s, then the real thing.
+function miniCue(kind, col, then) {
+  const tag = "minicue", t0 = time();
+  const label = kind === "mash" ? "MASH!" : kind === "sequence" ? "TAP x3" : kind === "wait" ? "WAIT..." : "TAP!";
+  add([rect(210, 42, { radius: 4 }), pos(W / 2, 176), anchor("center"), color(20, 20, 36), outline(2, rgb(...col)), z(32), tag]);
+  const txt = add([text(label, { size: 18 }), pos(W / 2 + 10, 172), anchor("center"), color(...col), opacity(1), z(33), tag]);
+  const btn = add([circle(12), pos(W / 2 - 74, 176), color(...col), outline(2, rgb(20, 20, 36)), opacity(1), z(33), tag]);
+  const a = add([text("A", { size: 13 }), pos(W / 2 - 74, 177), anchor("center"), color(20, 20, 36), opacity(1), z(34), tag]);
+  btn.onUpdate(() => {
+    const t = time() - t0;
+    if (kind === "mash") { const sc = 1 + 0.35 * Math.abs(Math.sin(t * 22)); btn.scale = vec2(sc); a.scale = vec2(sc); }
+    else if (kind === "wait") { btn.opacity = 0.35; a.opacity = 0.35; txt.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t * 4)); }
+    else { const sc = t % 0.4 < 0.12 ? 1.4 : 1; btn.scale = vec2(sc); a.scale = vec2(sc); }
+  });
+  if (kind === "timing" || kind === "sequence") {
+    // a tiny preview: the marker parked inside the zone
+    add([rect(64, 5), pos(W / 2 + 32, 190), color(...C_GREY), z(33), tag]);
+    add([rect(18, 5), pos(W / 2 + 55, 190), color(...col), z(34), tag]);
+    add([rect(2, 9), pos(W / 2 + 63, 188), color(...C_INK), z(35), tag]);
+  }
+  music.sfx("move");
+  wait(0.8, () => { destroyAll(tag); then(); });
+}
+
 // MASH: every press fills the bar a little; the counter bounces. Resolves with the fill ratio (0..1).
 function miniMash(o, done) {
   const dur = (o.duration || 2) / (o.speed || 1), target = Math.round(6 * dur);
   miniTrack();
   const fill = add([rect(1, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...(o.hot || C_GOLD)), z(27), MINI]);
   const clock = add([rect(TRACK.w - 2, 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), z(28), MINI]);
-  miniPrompt(o.prompt, W / 2 - 30, 163, 14, o.hot || C_GOLD);
+  miniPrompt(o.prompt, W / 2 - 30, 163, 14, o.hot || C_GOLD); miniButton(o.hot || C_GOLD);
   const counter = add([text("0", { size: 18 }), pos(W / 2 + 78, 163), anchor("center"), color(...C_INK), z(30), scale(1), MINI]);
   let n = 0, t = 0, over = false;
   const off = miniKeys(o.keys, () => {
@@ -1046,7 +1078,7 @@ function miniTiming(o, done) {
   zones.forEach((c) => miniZone(c - gw / 2, c + gw / 2, C_GREEN, 27));
   zones.forEach((c) => miniZone(c - pw / 2, c + pw / 2, o.hot || C_GOLD, 28, "minizone"));
   const marker = miniMarker();
-  miniPrompt(o.prompt || "TAP A!", W / 2, 163, 14, o.hot || C_GOLD);
+  miniPrompt(o.prompt || "TAP A!", W / 2, 163, 14, o.hot || C_GOLD); miniButton(o.hot || C_GOLD);
   // the marker sits parked for a beat first, so a press carried over from the menu is not the tap
   const ARM = 0.3;
   let t = -ARM, over = false;
@@ -1071,7 +1103,7 @@ function miniTiming(o, done) {
 function miniSequence(o, done) {
   const speed = o.speed || 1, pw = o.zone || 0.3, gw = pw + 0.14, dur = 0.85 / speed, N = 3;
   miniTrack();
-  miniPrompt("TAP A! x3", W / 2 - 40, 163, 14, C_GOLD);
+  miniPrompt("TAP A! x3", W / 2 - 40, 163, 14, C_GOLD); miniButton(C_GOLD);
   const stars = [0, 1, 2].map((i) => add([text("*", { size: 20 }), pos(W / 2 + 52 + i * 18, 167), anchor("center"), color(...C_GREY), z(30), scale(1), MINI]));
   stars[0].onUpdate(() => stars.forEach((s) => s.scale = vec2(Math.max(1, s.scale.x - 4 * dt()))));
   let hits = 0, i = 0, over = false, off = null;
@@ -1110,7 +1142,7 @@ function miniWait(o, done) {
   const speed = o.speed || 1, fakes = o.fakeouts || 0, spr = o.spr;
   const windup = rand(0.8, 1.6) / speed + fakes * 0.35;
   const home = spr ? spr.pos.clone() : null;
-  const prompt = miniPrompt("WAIT...", W / 2, 163, 18, C_INK);
+  const prompt = miniPrompt("WAIT...", W / 2, 163, 18, C_BLUE); miniButton(C_BLUE);
   miniTrack();
   const pulse = add([rect(TRACK.w - 2, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), opacity(0.3), z(27), MINI]);
   let t = 0, phase = "wait", early = false, over = false;
@@ -1143,7 +1175,7 @@ function miniWait(o, done) {
   });
   wait(windup, () => {
     if (over) return;
-    phase = "now"; prompt.text = "NOW!"; prompt.textSize = 20; prompt.color = rgb(...C_GOLD);
+    phase = "now"; prompt.text = "NOW!"; prompt.textSize = 20; prompt.color = rgb(...C_BLUE);
     lunge(10, 0.25); shake(6); music.sfx("slash");
     wait(0.4, () => finish(early ? "early" : "miss"));
   });
@@ -1177,7 +1209,10 @@ scene("battle", (which) => {
 
   const BY = 80; // the enemy stands a little high so the minigame strip fits under its HP bar
   const bossSpr = add([sprite(def.spr), pos(W / 2, BY), anchor("center"), scale(2), z(5)]);
-  bossSpr.onUpdate(() => { if (!busy && !boss.frozen) bossSpr.pos.y = BY + Math.sin(time() * 3) * 2; });
+  bossSpr.onUpdate(() => {
+    if (defending) { bossSpr.pos.y = BY + 10 + Math.abs(Math.sin(time() * 10)) * 8; bossSpr.pos.x = W / 2 + rand(-2, 2); return; }
+    if (!busy && !boss.frozen) bossSpr.pos.y = BY + Math.sin(time() * 3) * 2;
+  });
   const frost = add([rect(90, 84), pos(W / 2, BY), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
   frost.onUpdate(() => { frost.opacity = boss.frozen > 0 ? 0.35 : 0; });
   // captive siblings in the final fight
@@ -1252,9 +1287,9 @@ scene("battle", (which) => {
   function powerUp(action, done) {
     const kind = attackKind(action), speed = mini.speed || 1;
     const zone = (mini.zone || 0.3) * (action === "ice" ? 0.65 : 1); // ice asks for a steadier hand
-    if (kind === "mash") miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r)));
-    else if (kind === "sequence") miniSequence({ speed, zone }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss"));
-    else miniTiming({ prompt: "TAP A!", speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g));
+    if (kind === "mash") miniCue("mash", C_GOLD, () => miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r))));
+    else if (kind === "sequence") miniCue("sequence", C_GOLD, () => miniSequence({ speed, zone }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss")));
+    else miniCue("timing", C_GOLD, () => miniTiming({ prompt: "TAP A!", speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
   }
 
   function confirm() {
@@ -1344,14 +1379,27 @@ scene("battle", (which) => {
   }
   // a short warning in the track strip, then the defense begins
   function telegraph(txt, then) {
-    const p = add([text(txt, { size: 12 }), pos(W / 2, 163), anchor("center"), color(...C_RED), z(30)]);
-    wait(0.5, () => { destroy(p); then(); });
+    const p = add([text(txt, { size: 12 }), pos(W / 2, 163), anchor("center"), color(...C_BLUE), z(30)]);
+    wait(0.4, () => { destroy(p); then(); });
   }
   // the enemy's turn minigame: the rolled damage goes in; what lands comes out, never below 30% of the roll
+  let defending = false;
+  function defenseFx(on) {
+    destroyAll("defensefx");
+    defending = on;
+    if (!on) { bossSpr.pos.x = W / 2; return; }
+    // a blue glow behind the enemy and a bouncing "!" over its head, for the whole enemy turn
+    const glow = add([circle(46), pos(W / 2, BY), color(...C_BLUE), opacity(0.22), z(4), "defensefx"]);
+    glow.onUpdate(() => { glow.opacity = 0.14 + 0.14 * Math.abs(Math.sin(time() * 9)); });
+    const bang = add([text("!", { size: 26 }), pos(W / 2 + 34, BY - 44), anchor("center"), color(...C_BLUE), z(31), "defensefx"]);
+    bang.onUpdate(() => { bang.pos.y = BY - 44 - Math.abs(Math.sin(time() * 10)) * 8; });
+  }
   function defend(rolled, done) {
     const d = pickDefense(); defTurn += 1;
     const speed = mini.speed || 1;
+    defenseFx(true);
     const land = (cut) => {
+      defenseFx(false);
       let final = rolled;
       if (cut < 0) final = Math.round(rolled * (1 - cut));
       else if (cut > 0) final = Math.max(Math.ceil(rolled * 0.3), Math.round(rolled * (1 - cut)));
@@ -1359,12 +1407,13 @@ scene("battle", (which) => {
     };
     if (d.defend === "mashB") {
       telegraph(d.flurry ? "A FLURRY!!" : `${boss.name} ATTACKS!`, () =>
-        miniMash({ prompt: d.flurry ? "FLURRY! MASH B!" : "MASH B!", keys: BACK, duration: 1.5, speed, hot: C_TEAL, flurry: d.flurry }, (r) => land(0.6 * r)));
+        miniCue("mash", C_BLUE, () => miniMash({ prompt: d.flurry ? "FLURRY! MASH A!" : "BLOCK! MASH A!", keys: INTERACT.concat(BACK), duration: 1.5, speed, hot: C_BLUE, flurry: d.flurry }, (r) => land(0.6 * r))));
     } else if (d.defend === "wait") {
-      miniWait({ speed, fakeouts: d.fakeouts || 0, spr: bossSpr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0));
+      telegraph(`${boss.name} ATTACKS!`, () =>
+        miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: bossSpr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
     } else {
       telegraph(`${boss.name} ATTACKS!`, () =>
-        miniTiming({ prompt: "BLOCK! TAP B!", keys: BACK, speed, zone: mini.zone || 0.3, hot: C_TEAL }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0)));
+        miniCue("timing", C_BLUE, () => miniTiming({ prompt: "BLOCK! TAP A!", keys: INTERACT.concat(BACK), speed, zone: mini.zone || 0.3, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
     }
   }
 
