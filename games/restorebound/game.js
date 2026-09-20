@@ -30,6 +30,8 @@ const START = {
   hasSword: false, kidnapped: false, boomed: false, hasKey: false, talkedSis: false, talkedBro: false, talkedMom: false, talkedDad: false,
   cave: 0, beatBugon: false, party: [], branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
   beatLygon: false, hollow: 0, beatMalva: false,
+  // after Lygon: the walk home, the trouble next door, the King, the friends
+  homeAgain: false, kingFled: false, friends: false, partyHp: {}, rockets: 3,
 };
 const state = { name: "Finn", sis: "Lily", bro: "Max", dog: "Biscuit", maxHp: 40, maxPp: 30, ...START };
 
@@ -43,7 +45,8 @@ function loadSave() {
 }
 // Old saves keep working across updates: fill in any field a newer build added,
 // keep the player's names and progress, and fall back to a scene that still exists.
-const SCENES = ["upstairs", "downstairs", "town", "cave", "town2", "hollow"];
+const SCENES = ["upstairs", "downstairs", "town", "cave", "town2", "hollow", "house2", "road"];
+const PARTY_NAMES = ["sis", "bro", "pip", "zed", "bruno", "bloop"];
 function migrate(saved) {
   const st = { ...START, name: state.name, sis: state.sis, bro: state.bro, dog: state.dog, maxHp: state.maxHp, maxPp: state.maxPp, ...(saved.state || {}) };
   // a save from a build with different progress rules never traps the player: clamp what could
@@ -51,9 +54,21 @@ function migrate(saved) {
   st.cave = Math.min(Math.max(0, st.cave | 0), CAVE_ENEMIES.length);
   st.hollow = Math.min(Math.max(0, st.hollow | 0), HOLLOW_ORDER.length);
   st.beatLygon = !!st.beatLygon; st.beatMalva = !!st.beatMalva;
+  st.homeAgain = !!st.homeAgain; st.kingFled = !!st.kingFled; st.friends = !!st.friends;
+  st.party = Array.isArray(st.party) ? st.party.filter((n) => PARTY_NAMES.includes(n)) : [];
+  st.partyHp = st.partyHp && typeof st.partyHp === "object" ? { ...st.partyHp } : {};
+  st.rockets = Math.max(0, st.rockets | 0);
+  // a save from before the King: in that build the family was already home after Lygon
+  if (st.beatLygon && !("homeAgain" in (saved.state || {}))) st.homeAgain = true;
+  // the flags only ever go forward in this order
+  if (!st.beatLygon) st.homeAgain = false;
+  if (!st.homeAgain) st.kingFled = false;
+  if (!st.kingFled) { st.friends = false; st.party = st.party.filter((n) => n === "sis" || n === "bro"); }
+  if (st.homeAgain) st.party = st.party.filter((n) => n !== "sis" && n !== "bro");
   let scene = saved.scene;
-  // the east town and the Hollow only exist once Lygon is beaten
-  if ((scene === "town2" || scene === "hollow") && !st.beatLygon) scene = "town";
+  // the east town, the road and the Hollow only exist once Lygon is beaten
+  if ((scene === "town2" || scene === "hollow" || scene === "road") && !st.beatLygon) scene = "town";
+  if (scene === "house2" && !st.homeAgain) scene = "town";
   if (!SCENES.includes(scene)) scene = st.kidnapped ? "town" : "upstairs";
   return { scene, state: st };
 }
@@ -158,12 +173,14 @@ function wireMenu() {
 // Party members trail the hero along the path he actually walked: the player's recent
 // positions are kept in a ring, and follower i sits a fixed number of frames behind.
 function makeFollowers(player) {
+  // callable again when the party changes mid-scene
+  destroyAll("follower"); if (player.followUpd) { player.followUpd.cancel(); player.followUpd = null; }
   const names = state.party || [];
   if (!names.length) return [];
   const GAP = 14, trail = [];
   const fol = names.map((nm, i) => add([sprite(nm), pos(player.pos.x, player.pos.y + 6), anchor("topleft"), z(9.5 - i * 0.01), "follower"]));
   let last = player.pos.clone();
-  player.onUpdate(() => {
+  player.followUpd = player.onUpdate(() => {
     if (player.pos.dist(last) > 0.4) { trail.unshift(player.pos.clone()); last = player.pos.clone(); if (trail.length > GAP * names.length + 2) trail.pop(); }
     fol.forEach((f, i) => {
       const t = trail[Math.min(trail.length - 1, GAP * (i + 1))];
@@ -173,10 +190,30 @@ function makeFollowers(player) {
   });
   return fol;
 }
+// The fighters. sis and bro walk with you but never fight; the friends and Mr. Bloop do.
+const PARTY_MAX = { pip: 32, zed: 34, bruno: 46, bloop: 38 };
+const PARTY_LABEL = { pip: "Pip", zed: "Zed", bruno: "Bruno", bloop: "Bloop" };
+function fighters() { return (state.party || []).filter((n) => PARTY_MAX[n]); }
+function partyHpInit() {
+  if (!state.partyHp || state.partyHp === START.partyHp) state.partyHp = {};
+  fighters().forEach((n) => { if (state.partyHp[n] == null) state.partyHp[n] = PARTY_MAX[n]; });
+}
+// everyone heals where the hero heals
+function healAll(n) {
+  partyHpInit();
+  state.hp = Math.min(state.maxHp, state.hp + n);
+  fighters().forEach((m) => { state.partyHp[m] = Math.min(PARTY_MAX[m], state.partyHp[m] + n); });
+}
+function fullHeal() {
+  partyHpInit();
+  state.hp = state.maxHp; state.pp = state.maxPp;
+  fighters().forEach((m) => { state.partyHp[m] = PARTY_MAX[m]; });
+}
+
 function heroSprite() { return state.giantSword ? "hero_giant" : state.hasSword ? "hero_sword" : "hero"; }
 function makePlayer(x, y) {
   const p = add([
-    sprite(heroSprite()), pos(x, y),
+    sprite(heroSprite()), pos(x, y), rotate(0),
     area({ shape: new Rect(vec2(6, 22), 10, 9) }), body(), anchor("topleft"), z(10), "player",
   ]);
   const SPEED = 85;
@@ -202,8 +239,8 @@ function wall(x, y, w, h, col) {
 function npc(spr, x, y, tag, talk, opts = {}) {
   const n = add([sprite(spr), pos(x, y), area({ shape: new Rect(vec2(2, opts.footY ?? 12), 12, 8) }), body({ isStatic: true }), anchor("topleft"), z(9 + y / 1000), tag, "npc"]);
   n.talk = talk;
-  const baseY = y;
-  n.onUpdate(() => { n.pos.y = baseY + (Math.sin(time() * 2 + x) > 0.85 ? -1 : 0); });
+  n.baseY = y; n.cut = false;
+  n.onUpdate(() => { if (!n.cut) n.pos.y = n.baseY + (Math.sin(time() * 2 + x) > 0.85 ? -1 : 0); });
   return n;
 }
 
@@ -238,6 +275,9 @@ const HOLLOW_ORDER = ["clonk", "skreek", "thud", "flitz", "grumbo", "batty"];
 function hud() {
   const t = add([text("", { size: 8 }), pos(10, 6), color(232, 232, 240), z(50), fixed()]);
   t.onUpdate(() => { t.text = `${state.name}  HP ${state.hp}/${state.maxHp}  PP ${state.pp}/${state.maxPp}`; });
+  // the fighters' HP under it, once anyone has joined
+  const p = add([text("", { size: 8 }), pos(10, 16), color(207, 207, 216), z(50), fixed()]);
+  p.onUpdate(() => { p.text = fighters().map((n) => `${PARTY_LABEL[n]} ${(state.partyHp && state.partyHp[n]) ?? PARTY_MAX[n]}`).join("   "); });
 }
 
 // purple lightning through a window: flashes + a rumble
@@ -345,7 +385,7 @@ scene("title", (opts = {}) => {
 scene("upstairs", () => {
   resetCam();
   save("upstairs");
-  music.play(state.kidnapped ? "danger" : "night");
+  music.play(state.kidnapped && !state.homeAgain ? "danger" : "night");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   decorUpstairs();
@@ -416,7 +456,8 @@ scene("upstairs", () => {
     say([`* You reach behind ${state.bro}'s bed. Dust. A sock. A robot made of...`, "* ...the SPARE KEY. He was using the spare key as a robot.", `* ${state.name} got the SPARE KEY!`]);
   };
 
-  const sis = state.kidnapped ? null : npc("sis", W - 100, 100, "sis", () => {
+  const sis = state.kidnapped && !state.homeAgain ? null : npc("sis", W - 100, 100, "sis", () => {
+    if (state.homeAgain) { say([`${state.sis}: zzz... I wasn't scared... zzz...`, `${state.sis}: ...${state.name}? Is the shouting next door about YOU?`]); return; }
     if (!state.boomed) { say([`${state.sis}: ${state.name}? Why are you up? Go back to bed.`]); return; }
     if (!state.talkedSis) {
       state.talkedSis = true;
@@ -431,8 +472,9 @@ scene("upstairs", () => {
     say(state.hasSword ? [`${state.sis}: A SWORD?! That is so unfair. I want a sword.`] : [`${state.sis}: The present! On the rug! Go on!`]);
   }, { footY: 14 });
 
-  const bro = state.kidnapped ? null : npc("bro", W - 124, 104, "bro", () => {
+  const bro = state.kidnapped && !state.homeAgain ? null : npc("bro", W - 124, 104, "bro", () => {
     state.talkedBro = true;
+    if (state.homeAgain) { say([`${state.bro}: zzz... clown... zzz...`, `${state.bro}: ...I'm sleeping in ${state.sis}'s room forever. That's the rule now.`]); return; }
     if (!state.boomed) { say([`${state.bro}: zzz... robots... zzz...`]); return; }
     say(state.hasSword ? [`${state.bro}: whoa. whoa. whoa.`, `${state.bro}: can I hold it? just for a second? no? okay.`] : [
       `${state.bro}: ${state.name}... the booming is getting CLOSER.`,
@@ -441,7 +483,9 @@ scene("upstairs", () => {
     ]);
   }, { footY: 12 });
 
-  npc("dog", 40, 128, "dog", () => say(state.kidnapped
+  npc("dog", 40, 128, "dog", () => say(state.homeAgain
+    ? [`* ${state.dog} is lying across the siblings' doorway. Nobody is getting past ${state.dog} tonight.`]
+    : state.kidnapped
     ? [`* ${state.dog} is standing at the top of the stairs, growling at nothing.`, `* ${state.dog} knows.`]
     : [`* ${state.dog} is under your bed. Only the tail is out.`, "* The tail says: no."]), { footY: 6 });
 
@@ -537,10 +581,13 @@ const DAD_LINES = () => [
   `Dad: Your sister bit him on the way out. I saw it. That's my girl.`,
 ];
 
-scene("downstairs", () => {
+scene("downstairs", (opts) => {
+  opts = opts || {};
   resetCam();
   save("downstairs");
-  music.play(state.kidnapped ? "danger" : "night");
+  // the siblings are home: the reunion plays once, then they go up to bed
+  const reunion = (state.party || []).includes("sis") && !state.homeAgain;
+  music.play(state.kidnapped && !state.homeAgain ? "danger" : "night");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   decorDownstairs();
@@ -569,9 +616,15 @@ scene("downstairs", () => {
   add([rect(10, 10), pos(140, 180), color(60, 40, 20), rotate(35)]);
   add([rect(14, 4), pos(180, 200), color(200, 80, 90), rotate(-15)]);
 
-  const player = makePlayer(50, 84);
+  const player = makePlayer(reunion || opts.from === "town" ? W / 2 - 11 : 50, reunion ? 112 : opts.from === "town" ? H - 42 : 84);
+  const fol = makeFollowers(player);
 
-  npc("mom", W - 100, 140, "mom", () => {
+  const mom = npc("mom", W - 100, 140, "mom", () => {
+    if (state.homeAgain) {
+      say(state.kingFled ? [`Mom: Pip's mother called. Pip is WITH you? Pip is eight, ${state.name}.`, "Mom: ...Fine. Cookies for everybody, then."]
+        : [`Mom: That shouting next door. That's Mr. Fenn's house. Mr. Fenn does not SHOUT.`, `Mom: Don't you dare go over there. ...You're going over there. Take a cookie.`]);
+      return;
+    }
     if (!state.talkedMom) {
       state.talkedMom = true; music.sfx("pickup");
       say([
@@ -587,7 +640,12 @@ scene("downstairs", () => {
     say([choose(MOM_LINES())]);
   }, { footY: 16 });
 
-  npc("dad", W / 2 + 50, H - 76, "dad", () => {
+  const dad = npc("dad", W / 2 + 50, H - 76, "dad", () => {
+    if (state.homeAgain) {
+      say(state.kingFled ? ["Dad: A KING. In Fenn's living room. And he SHOVED you?", "Dad: He went east, you said. Go get him. Twice for your mother."]
+        : ["Dad: There's a light in Fenn's window. Purple. I've seen enough purple for one lifetime.", "Dad: If you go over there, you come straight back. STRAIGHT back."]);
+      return;
+    }
     if (!state.talkedDad) {
       state.talkedDad = true;
       say([
@@ -614,12 +672,69 @@ scene("downstairs", () => {
     if (dialogOpen) return;
     if (!state.talkedMom || !state.talkedDad) { say(["* Mom and Dad are calling your name."]); player.pos.y -= 8; return; }
     if (!state.hasKey) { say(["* Locked. LYGON's purple seal hums on the handle.", `* Dad said the spare key is behind ${state.bro}'s bed.`]); player.pos.y -= 8; return; }
+    if (state.homeAgain) { music.sfx("door"); go("town", { from: "home" }); return; }
     music.sfx("unlock");
-    say(["* The spare key turns. The purple seal pops like a soap bubble.", `* ${state.name} stepped out into the flashing night.`], () => { music.sfx("door"); go("town"); });
+    say(["* The spare key turns. The purple seal pops like a soap bubble.", `* ${state.name} stepped out into the flashing night.`], () => { music.sfx("door"); go("town", { from: "home" }); });
   });
 
-  wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is glowing purple. Mom and Dad are both talking at once."]));
+  if (reunion) reunionScene(player, fol, mom, dad);
+  else if (state.homeAgain) wait(0.3, () => say(state.kingFled ? ["* Home. Everyone is talking about the King."] : ["* Home. Through the wall: SHOUTING, from next door."]));
+  else wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is glowing purple. Mom and Dad are both talking at once."]));
 });
+
+// The reunion, at home. Mom and Dad run over, everyone hugs, the siblings go up to bed;
+// then, that night, the window flashes purple and the voice behind the orb speaks.
+function reunionScene(player, fol, mom, dad) {
+  window.__frozen = true;
+  music.play("night");
+  // the siblings stop trailing and stand at your sides for the scene
+  if (player.followUpd) { player.followUpd.cancel(); player.followUpd = null; }
+  const [fs, fb] = fol;
+  fs.pos = vec2(player.pos.x - 24, player.pos.y + 4); fb.pos = vec2(player.pos.x + 26, player.pos.y + 4);
+  const slide = (o, to, d, ease) => tween(o.pos, to, d, (p) => { o.pos = p; }, ease || easings.easeOutQuad);
+  const hearts = () => { for (let i = 0; i < 8; i++) add([text("<3", { size: 8 }), pos(player.pos.x + rand(-40, 60), player.pos.y + rand(-10, 20)), anchor("center"), color(224, 69, 63), z(60), opacity(1), lifespan(1.2, { fade: 0.6 }), move(UP, rand(12, 30))]); };
+  wait(0.6, () => say(["* Home.", `Mom: ...${state.name}?`, `Mom: ${state.sis}!! ${state.bro}!!`], () => {
+    mom.cut = true; dad.cut = true;
+    slide(mom, vec2(player.pos.x - 50, player.pos.y - 4), 0.6); slide(dad, vec2(player.pos.x + 48, player.pos.y - 6), 0.7);
+    wait(0.75, () => {
+      hearts(); shake(4); music.sfx("pickup");
+      say([
+        `${state.sis}: ${state.name}!! You came! I KNEW you'd come. I wasn't scared.`,
+        `${state.bro}: I was a little scared.`,
+        "Mom: Oh, my babies. ALL of my babies. Come here.",
+        `* Everyone hugged. Even Dad. Even ${state.dog}, sort of.`,
+        "Dad: That's my kids. That's all three of my kids.",
+        "Mom: Bed. Both of you. NOW. ...Please.",
+      ], () => {
+        hearts();
+        slide(fs, vec2(24, 58), 1.3); slide(fb, vec2(36, 62), 1.4);
+        wait(1.5, () => {
+          destroy(fs); destroy(fb);
+          state.party = []; state.homeAgain = true; fullHeal(); save("downstairs");
+          say(["* That night, everyone slept in the same room. Nobody argued about it."], () => {
+            music.play("danger");
+            const wash = add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0.6), z(90), fixed()]);
+            wash.onUpdate(() => { wash.opacity = Math.max(0, wash.opacity - 0.9 * dt()); });
+            shake(18); music.sfx("boom");
+            wait(1.2, () => say([
+              "* The window flashed PURPLE.",
+              "* Not thunder. Not the clown. Something farther away. Something WATCHING.",
+              `A VOICE: I see you, ${state.name}.`,
+              "A VOICE: I have always seen you. Through the orb. Every step. The clown was only the first thing I sent.",
+              `* ${state.name} put a hand on the sword.`,
+              "* GOAL: Find her. Break the orb.",
+              "* ...",
+              "* Morning. Next door, somebody is SHOUTING.",
+            ], () => {
+              music.play("night"); window.__frozen = false;
+              mom.cut = false; dad.cut = false; mom.baseY = mom.pos.y; dad.baseY = dad.pos.y;
+            }));
+          });
+        });
+      });
+    });
+  }));
+}
 
 // ---------------------------------------------------------------- scene: town
 
@@ -634,8 +749,8 @@ scene("town", (opts) => {
   add([rect(W, 34), pos(0, H - 48), color(214, 190, 140)]);
   decorTown();
   wall(0, 0, 6, H); wall(0, H - 6, W, 6);
-  // once Lygon is beaten the road runs on east, off the right edge, to the next town
-  if (state.beatLygon) {
+  // once the King has run east the road runs on, off the right edge, to the next town
+  if (state.kingFled) {
     wall(W - 6, 0, 6, H - 48); wall(W - 6, H - 14, 6, 14);
     add([rect(6, 34), pos(W - 6, H - 48), color(214, 190, 140), z(1)]);
     add([text(">", { size: 8 }), pos(W - 12, H - 34), anchor("center"), color(242, 208, 92), z(2)]);
@@ -654,8 +769,34 @@ scene("town", (opts) => {
     s.onUpdate(() => { s.pos.y -= 12 * dt(); s.opacity -= 0.25 * dt(); if (s.opacity <= 0) { s.pos = vec2(W / 2 + rand(-10, 10), 12); s.opacity = 0.6; } });
   }
 
-  const player = makePlayer(opts.from === "east" ? W - 34 : W / 2 - 11, H - 44);
-  player.onCollide("east", () => { if (!dialogOpen) go("town2", { from: "west" }); });
+  const player = makePlayer(opts.from === "east" ? W - 34 : opts.from === "home" ? 20 + 12 : opts.from === "trouble" ? W - 66 + 12 : W / 2 - 11,
+    opts.from === "home" || opts.from === "trouble" ? 62 : H - 44);
+  makeFollowers(player);
+  player.onCollide("east", () => { if (!dialogOpen) go("road", { from: "west" }); });
+  // the road east is closed until the King has gone that way
+  if (state.beatLygon && !state.kingFled) {
+    add([rect(4, 34), pos(W - 10, H - 48), area(), opacity(0), "eastlocked"]);
+    player.onCollide("eastlocked", () => {
+      if (dialogOpen) return; player.pos.x -= 8;
+      say(state.homeAgain ? ["* The road east. Somebody is SHOUTING behind you, in the house on the right.", "* First things first."] : [`* The road east. Not with ${state.sis} and ${state.bro} still out here. Home first.`]);
+    });
+  }
+  // home: the house on the left. Its door takes you in.
+  add([rect(12, 6), pos(20 + 17, 40 + 14), area(), opacity(0), "homedoor"]);
+  player.onCollide("homedoor", () => { if (!dialogOpen) { music.sfx("door"); go("downstairs", { from: "town" }); } });
+  // the trouble house: the house on the right. After the reunion there is shouting inside.
+  if (state.homeAgain) {
+    add([rect(12, 6), pos(W - 66 + 17, 40 + 14), area(), opacity(0), "troubledoor"]);
+    if (!state.kingFled) {
+      const mark = add([text("!", { size: 12 }), pos(W - 66 + 23, 30), anchor("center"), color(242, 208, 92), z(6), "troublemark"]);
+      mark.onUpdate(() => { mark.pos.y = 30 - Math.abs(Math.sin(time() * 6)) * 4; mark.hidden = Math.floor(time() * 4) % 4 === 0; });
+    }
+    player.onCollide("troubledoor", () => {
+      if (dialogOpen) return;
+      if (state.kingFled) { music.sfx("door"); go("house2"); return; }
+      say(["* Through the door: a man's voice, begging.", "* And another voice. Calm. Cold.", "???: ...RISE."], () => { music.sfx("door"); go("house2"); });
+    });
+  }
 
   // the big top at the top of the hill, right behind the wreck: the wagon crashed into its entrance
   add([sprite("tentmouth"), pos(W / 2 - 24, 0), anchor("topleft"), z(1)]);
@@ -707,8 +848,12 @@ scene("town", (opts) => {
   wireMenu();
   hud();
 
-  wait(0.3, () => say(state.beatLygon
-    ? (opts.from === "east" ? ["* Home. The cave is quiet. The east is not."] : ["* The cave is quiet now. Down the road, to the EAST, the sky is still flickering purple."])
+  wait(0.3, () => say(state.beatLygon && !state.homeAgain
+    ? [`* ${state.sis} and ${state.bro} are right behind you.`, "* Home is the house on the LEFT. Mom and Dad are waiting."]
+    : state.homeAgain && !state.kingFled
+    ? ["* SHOUTING. From the house on the RIGHT, next door.", "* A man's voice, scared. And another voice. Not scared at all."]
+    : state.kingFled
+    ? (opts.from === "east" ? ["* Home. The cave is quiet. The east is not."] : ["* The King went EAST, down the road. So did the purple in the sky."])
     : state.cave > 0
     ? ["* The cave is still humming. Your family is still in there."]
     : ["* The air smells like popcorn and lightning.", "* Up the path, a cave is glowing purple."]));
@@ -1302,7 +1447,8 @@ scene("town2", (opts) => {
   add([rect(28, 8), pos(W / 2 - 14, 30), area(), "hollowzone"]);
 
   const player = makePlayer(opts.from === "north" ? W / 2 - 11 : 18, opts.from === "north" ? 48 : H - 44);
-  player.onCollide("west", () => { if (!dialogOpen) go("town", { from: "east" }); });
+  makeFollowers(player);
+  player.onCollide("west", () => { if (!dialogOpen) go("road", { from: "east" }); });
   player.onCollide("hollowzone", () => {
     if (dialogOpen) return;
     if (state.hollow === 0) {
@@ -1323,13 +1469,14 @@ scene("town2", (opts) => {
     "Granny Pott: Somebody in there is doing that to them. Somebody who likes to WATCH.",
   ]), { footY: 16 });
 
-  npc("kid", W - 130, H - 52, "pip", () => say(state.hollow > 3 ? [
-    "Pip: Ms. Abernathy came back! She gave me homework. On a WEEKEND. It's so good to have her back.",
-    "Pip: The last flappy one is right by the door up top. It's the doctor. Be careful, she bites.",
+  npc("kid", W - 130, H - 52, "nell", () => say(state.hollow > 3 ? [
+    "Nell: Ms. Abernathy came back! She gave me homework. On a WEEKEND. It's so good to have her back.",
+    "Nell: The last flappy one is right by the door up top. It's the doctor. Be careful, she bites.",
   ] : [
-    "Pip: Ms. Abernathy was my TEACHER. Then she flew off. I'm not sad. Okay, I'm a little sad.",
-    "Pip: The stompy ones stay on the ground. The flappy ones SWOOP when you get close.",
-    `Pip: They only come at you one at a time, though. The rest just watch. Weird, right, ${state.name}?`,
+    "Nell: Ms. Abernathy was my TEACHER. Then she flew off. I'm not sad. Okay, I'm a little sad.",
+    "Nell: The stompy ones stay on the ground. The flappy ones SWOOP when you get close.",
+    `Nell: They only come at you one at a time, though. The rest just wander around. Weird, right, ${state.name}?`,
+    "Nell: A man in a crown came through here an hour ago. He went UP. Nobody stopped him. Nobody could.",
   ]), { footY: 14 });
 
   npc("mom", 60, 100, "dobbs", () => say(state.hollow >= 5 ? [
@@ -1404,7 +1551,7 @@ scene("hollow", (opts) => {
   // where everyone stands. Flyers patrol a sine path around their home; walkers pace on the floor.
   const HOMES = {
     clonk: { x: 80, y: 540 }, thud: { x: 160, y: 540 }, grumbo: { x: 240, y: 540 },
-    skreek: { x: 96, y: 430, amp: 52, ph: 0 }, flitz: { x: 224, y: 320, amp: 52, ph: 2 }, batty: { x: 96, y: 220, amp: 52, ph: 4 },
+    skreek: { x: 96, y: 430, amp: 60, ph: 0 }, flitz: { x: 224, y: 320, amp: 60, ph: 2 }, batty: { x: 96, y: 220, amp: 60, ph: 4 },
   };
   const SEAL_Y = 130, BOSS = { x: W / 2, y: 86 };
 
@@ -1418,6 +1565,7 @@ scene("hollow", (opts) => {
     }
   }
   const player = makePlayer(sx, sy);
+  makeFollowers(player);
   player.onUpdate(() => { camPos(W / 2, Math.max(H / 2, Math.min(HOLLOW_H - H / 2, player.pos.y + 16))); });
   wireMenu();
 
@@ -1425,8 +1573,8 @@ scene("hollow", (opts) => {
     if (i < state.hollow) return;
     const h = HOMES[name], flying = h.amp !== undefined;
     const e = add([sprite(ENEMIES[name].spr), pos(h.x, h.y), anchor("center"), z(flying ? 12 : 5), area({ shape: new Rect(vec2(0, 0), 30, 26) }), "henc", flying ? "hswoop" : "hstomp"]);
-    e.enemyIndex = i; e.enemyName = name; e.flying = flying; e.armed = i === state.hollow; e.diving = false;
-    let t = rand(0, 6);
+    e.enemyIndex = i; e.enemyName = name; e.flying = flying; e.armed = i === state.hollow; e.diving = false; e.chasing = false;
+    let t = rand(0, 6), wt = 0, wdir = vec2(0, 0);
     e.onUpdate(() => {
       e.armed = e.enemyIndex === state.hollow;
       t += dt();
@@ -1442,14 +1590,25 @@ scene("hollow", (opts) => {
           e.pos.y += Math.sin(t * 14) * 0.6;
         } else {
           e.diving = false;
-          const gx = h.x + Math.sin(t * 0.9 + h.ph) * h.amp, gy = h.y + Math.sin(t * 2.3 + h.ph) * 10;
-          e.pos = e.pos.add(vec2(gx, gy).sub(e.pos).scale(Math.min(1, 4 * dt())));
+          // the patrol wanders: a steady back-and-forth sweep (no slow turn at the ends) whose centre drifts
+          const tri = (p) => 2 * Math.abs(((p / Math.PI) % 2 + 2) % 2 - 1) - 1;
+          const gx = h.x + tri(t * 0.9 + h.ph) * h.amp + Math.sin(t * 0.17 + h.ph) * 20, gy = h.y + Math.sin(t * 2.3 + h.ph) * 10 + Math.sin(t * 0.31 + h.ph) * 18;
+          e.pos = e.pos.add(vec2(gx, gy).sub(e.pos).scale(Math.min(1, 14 * dt())));
         }
         if (Math.abs(e.pos.x - before) > 0.05) e.flipX = e.pos.x < before;
       } else {
-        e.pos.x = h.x + Math.sin(t * 0.8 + i) * 8;
-        e.pos.y = h.y + (Math.sin(t * 6) > 0.9 ? -2 : 0);
-        e.flipX = Math.cos(t * 0.8 + i) < 0;
+        const target = player.pos.add(11, 16), d = target.sub(e.pos);
+        if (e.armed && !dialogOpen && d.len() < 90 && d.len() > 4) {
+          // the armed walker hunts: straight at you
+          e.chasing = true;
+          e.pos = e.pos.add(d.unit().scale(40 * dt())); e.flipX = d.x < 0;
+        } else {
+          // the others wander the floor: a few steps, a pause, a new direction
+          e.chasing = false; wt -= dt();
+          if (wt <= 0) { wt = rand(0.8, 2); const a = rand(0, Math.PI * 2); wdir = Math.random() < 0.35 ? vec2(0, 0) : vec2(Math.cos(a), Math.sin(a)); }
+          if (wdir.len() > 0) { e.pos = e.pos.add(wdir.scale(22 * dt())); e.flipX = wdir.x < 0; }
+        }
+        e.pos.x = clamp(e.pos.x, HX + 18, W - HX - 18); e.pos.y = clamp(e.pos.y, h.y - 50, Math.min(HOLLOW_H - 30, h.y + 50));
       }
     });
     // the armed one carries a mark, so the order is readable at a glance
@@ -1503,6 +1662,227 @@ scene("hollow", (opts) => {
     ? ["* Black stone. Purple light from somewhere far above. Chains, swaying with no wind.", "* Wingbeats, high up. Footsteps, close. Six shapes with purple eyes, and every one of them used to be somebody."]
     : left > 0 ? [`* ${left} of hers left. The seal at the top is still humming.`]
     : ["* The seal is gone. At the top of the hall, something purple is pulsing like a heartbeat.", "* She's up there. So is the orb."]));
+});
+
+
+// ---------------------------------------------------------------- scene: the trouble house (house2)
+// Next door. A scared man, two neighbours with purple eyes, and the KING behind them with his
+// hand up. The fight is against both at once; the friends barge in during it. Afterwards the
+// King shoves you down and runs east; the friends join.
+
+scene("house2", (opts) => {
+  opts = opts || {};
+  resetCam();
+  window.__frozen = false;
+  const after = !!opts.after, quiet = state.kingFled && !after;
+  music.play(quiet ? "night" : "danger");
+  if (!after) save("house2");
+  add([rect(W, H), pos(0, 0), color(196, 170, 150)]);
+  for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(176, 150, 130)]);
+  wall(0, 0, W, 40, [120, 150, 190]);
+  wall(0, 0, 8, H, [100, 70, 45]); wall(W - 8, 0, 8, H, [100, 70, 45]);
+  wall(0, H - 8, W / 2 - 22, 8, [100, 70, 45]); wall(W / 2 + 22, H - 8, W / 2 - 22, 8, [100, 70, 45]);
+  const windows = [{ x: 60, y: 8, w: 30, h: 22 }, { x: W - 90, y: 8, w: 30, h: 22 }];
+  windows.forEach(drawWindow);
+  add([rect(44, 8), pos(W / 2 - 22, H - 8), color(60, 40, 20)]);
+  add([text("v", { size: 8 }), pos(W / 2, H - 16), anchor("center"), color(242, 208, 92)]);
+  // a couch, a bread shelf, a table that has been knocked about
+  wall(40, 150, 56, 22, [150, 90, 90]); add([rect(52, 4), pos(42, 148), color(180, 110, 110)]);
+  wall(W - 80, 60, 60, 24, [140, 100, 60]);
+  for (let i = 0; i < 5; i++) add([rect(6, 4), pos(W - 76 + i * 11, 66), color(214, 170, 100), z(2)]);
+  wall(200, 156, 70, 22, [90, 110, 160]);
+  for (let i = 0; i < 9; i++) add([rect(8, 5), pos(30 + ((i * 37) % (W - 70)), 62 + ((i * 53) % (H - 110))), color(244, 241, 234), rotate(-40 + i * 10), z(1)]);
+
+  const player = makePlayer(W / 2 - 11, after ? 118 : H - 46);
+  add([rect(44, 6), pos(W / 2 - 22, H - 6), area(), "door"]);
+  player.onCollide("door", () => { if (!dialogOpen && !window.__frozen) { music.sfx("door"); go("town", { from: "trouble" }); } });
+  wireTalk(player); wireMenu(); hud();
+
+  if (quiet) {
+    // afterwards: two neighbours with cold towels on their heads
+    makeFollowers(player);
+    npc("man", 40, 96, "man", () => say([
+      "Man: He's gone, kid. EAST. Toward the next town, and that hill with the hole in it.",
+      "Man: You didn't hit HIM once. He just... shoved you and went. What kind of king is that.",
+    ]), { footY: 16 });
+    npc("stomper1", 44, 122, "fenn", () => say(["Mr. Fenn: I'm all right. I'm all right. Did I... did I try to MAIL you?", "Mr. Fenn: Stamps. I remember stamps. Purple ones."]), { footY: 22 });
+    npc("swooper1", 74, 124, "bea", () => say(["Old Bea: The King came in like he owned the place. Said 'rise'. I ROSE. Right up to the CEILING.", "Old Bea: Free bread for life, dear. When I can stand."]), { footY: 18 });
+    wait(0.3, () => say(["* Mr. Fenn and Old Bea are on the couch with cold towels on their heads.", "* The man is sweeping up letters."]));
+    return;
+  }
+
+  const man = add([sprite("man"), pos(30, 96), anchor("topleft"), z(8)]);
+  const fenn = add([sprite("stomper1"), pos(after ? 44 : 104, after ? 124 : 92), anchor("topleft"), z(8)]);
+  const bea = add([sprite("swooper1"), pos(after ? 74 : 128, after ? 126 : 60), anchor("topleft"), z(9)]);
+  const king = add([sprite("king"), pos(after ? W / 2 + 40 : 182, after ? 96 : 84), anchor("topleft"), z(8), "king"]);
+  // the King's raised hand: a purple glow, and the wash it throws over the room
+  const hand = add([circle(6), pos(king.pos.x + 18, king.pos.y - 2), color(199, 123, 214), opacity(0.6), z(9)]);
+  const wash = add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0.12), z(30), fixed()]);
+  hand.onUpdate(() => { hand.pos = king.pos.add(18, -2); hand.opacity = 0.4 + 0.3 * Math.abs(Math.sin(time() * 5)); hand.radius = 5 + Math.sin(time() * 5) * 1.5; wash.opacity = 0.06 + 0.06 * Math.abs(Math.sin(time() * 5)); });
+  window.__frozen = true;
+  const slide = (o, to, d, ease) => tween(o.pos, to, d, (p) => { o.pos = p; }, ease || easings.easeOutQuad);
+
+  if (!after) {
+    man.onUpdate(() => { man.pos.x = 30 + rand(-0.6, 0.6); });
+    bea.onUpdate(() => { bea.pos.y = 60 + Math.sin(time() * 3) * 3; });
+    const lines = opts.retry ? ["The King: Back on your feet? Good.", "The King: Rise, my subjects. RISE."] : [
+      "Man: P-please! Bea! Fenn! It's ME! You KNOW me!",
+      `Man: ...${state.name}?! Kid! Get out of here! They're not... they're not THEM anymore!`,
+      "The King: Rise, my subjects. RISE.",
+      "* The two of them turned around. Their eyes glow purple.",
+      "MR. FENN: MAIL. FOR. YOU.",
+      "OLD BEA: FRESH. BREAD.",
+      "The King: Ah. The sword boy. She said you would come. She sees everything.",
+      "The King: Fenn. Bea. Take him.",
+    ];
+    wait(0.5, () => say(lines, () => go("battle", "house2")));
+    return;
+  }
+
+  // after the fight: the friends are by the door, the King has not moved
+  fenn.opacity = 0.8; bea.opacity = 0.8;
+  const friends = ["pip", "zed", "bruno"].map((n, i) => add([sprite(n), pos(W / 2 + 28 + i * 26, H - 72), anchor("topleft"), z(8), "friend"]));
+  wait(0.6, () => say(["The King: ...Hm.", "The King: Useful, that sword. She wants it. She wants YOU."], () => {
+    // the shove
+    slide(king, vec2(player.pos.x + 22, player.pos.y - 2), 0.3, easings.easeInQuad);
+    wait(0.32, () => {
+      music.sfx("bang"); shake(22);
+      add([text("OOF!", { size: 16 }), pos(player.pos.x + 12, player.pos.y - 14), anchor("center"), color(242, 208, 92), z(60), opacity(1), lifespan(0.9, { fade: 0.4 }), move(UP, 20)]);
+      slide(player, vec2(player.pos.x - 44, player.pos.y + 8), 0.3);
+      tween(0, -80, 0.3, (a) => { player.angle = a; });
+      wait(0.6, () => say(["The King: Tell HER I am not finished.", "The King: Nobody rises without me."], () => {
+        music.sfx("door");
+        slide(king, vec2(W / 2 - 10, H - 34), 0.6, easings.easeInQuad);
+        wait(0.65, () => {
+          destroy(king); hand.hidden = true; wash.opacity = 0; shake(8);
+          state.kingFled = true;
+          tween(-80, 0, 0.4, (a) => { player.angle = a; });
+          wait(0.5, () => say([
+            "Man: ...Kid? Kid! Are you all right?",
+            "Man: He's gone. Out the door. EAST, toward the next town. Laughing.",
+            "Man: Bea? Fenn? ...They're breathing. They're okay. You did that.",
+            "Pip: We saw him run. He's not getting away with it.",
+            "Zed: I have MORE zip in this gun. Lots more.",
+            "Bruno: HYAA.",
+            `Pip: We're coming with you, ${state.name}. Don't argue.`,
+            "* PIP, ZED and BRUNO joined the party!",
+          ], () => {
+            state.party = ["pip", "zed", "bruno"]; state.friends = true; state.rockets = 3; partyHpInit(); fullHeal();
+            music.sfx("pickup"); save("house2");
+            destroyAll("friend"); makeFollowers(player); window.__frozen = false;
+          }));
+        });
+      }));
+    });
+  }));
+});
+
+// ---------------------------------------------------------------- scene: the road (between the towns)
+// A wide strip of country: grass, a dirt road, trees and rocks to weave around. Strays wander
+// it and come for you when you are close. Mr. Bloop is sitting in the middle of it.
+
+const ROAD_W = 960;
+const ROAM_DONE = new Set(); // strays beaten this visit; a fresh entry brings them back
+// a wandering enemy: ambles, then walks at you inside ~90px. Trees and rocks stop it like they stop you.
+function roamer(key, id, x, y, player, graceUntil = 0) {
+  const def = ENEMIES[key];
+  const e = add([sprite(def.spr), pos(x, y), anchor("center"), area({ shape: new Rect(vec2(0, 6), 24, 22) }), body(), z(8), "roamer"]); // a Rect area is centred by the anchor; this one hangs low, where feet meet
+  e.roamId = id; e.enemyName = key; e.chasing = false;
+  let dir = vec2(1, 0), t = 0;
+  e.onUpdate(() => {
+    if (dialogOpen || window.__frozen) return;
+    const target = player.pos.add(11, 16), d = target.sub(e.pos);
+    e.chasing = d.len() < 90 && time() > graceUntil;
+    if (e.chasing) { e.move(d.unit().scale(40)); e.flipX = d.x < 0; }
+    else {
+      t -= dt();
+      if (t <= 0) { t = rand(0.8, 2); const a = rand(0, Math.PI * 2); dir = Math.random() < 0.3 ? vec2(0, 0) : vec2(Math.cos(a), Math.sin(a)); }
+      if (dir.len() > 0) { e.move(dir.scale(22)); e.flipX = dir.x < 0; }
+    }
+    e.z = 8 + e.pos.y / 1000;
+  });
+  const mark = add([text("!", { size: 10 }), pos(x, y - 20), anchor("center"), color(224, 69, 63), z(13)]);
+  mark.onUpdate(() => { if (!e.exists()) { destroy(mark); return; } mark.hidden = !e.chasing || Math.floor(time() * 3) % 3 === 0; mark.pos = e.pos.add(0, -20); });
+  return e;
+}
+function roamWin(o) { ROAM_DONE.add(o.roamer); healAll(6); go(o.map || "road", { resume: true, at: o.at }); }
+
+scene("road", (opts) => {
+  opts = opts || {};
+  resetCam();
+  music.play("outside");
+  window.__frozen = false;
+  save("road");
+  if (!opts.resume) ROAM_DONE.clear();
+  const RY = 150, RH = 40;
+  add([rect(ROAD_W, H), pos(0, 0), color(94, 170, 100)]);
+  add([rect(ROAD_W, 70), pos(0, 0), color(74, 140, 90)]);
+  for (let x = 0; x < ROAD_W; x += 48) add([circle(26), pos(x, 70), color(80, 150, 92), z(0)]);
+  for (let i = 0; i < 420; i++) add([rect(1, 2), pos((i * 97) % ROAD_W, 72 + ((i * 53) % (H - 72))), color(70, 140, 80)]);
+  add([rect(ROAD_W, RH), pos(0, RY), color(214, 190, 140)]);
+  for (let x = 20; x < ROAD_W; x += 60) { add([rect(24, 2), pos(x, RY + 12), color(190, 166, 120)]); add([rect(24, 2), pos(x + 30, RY + 26), color(190, 166, 120)]); }
+  wall(0, 0, ROAD_W, 70); wall(0, H - 10, ROAD_W, 10);
+  wall(0, 70, 6, RY - 70); wall(0, RY + RH, 6, H - RY - RH); add([rect(6, RH), pos(0, RY), area(), opacity(0), "west"]);
+  wall(ROAD_W - 6, 70, 6, RY - 70); wall(ROAD_W - 6, RY + RH, 6, H - RY - RH); add([rect(6, RH), pos(ROAD_W - 6, RY), area(), opacity(0), "east"]);
+  add([text("<", { size: 8 }), pos(12, RY + 20), anchor("center"), color(242, 208, 92), z(2)]);
+  add([text(">", { size: 8 }), pos(ROAD_W - 12, RY + 20), anchor("center"), color(242, 208, 92), z(2)]);
+  // obstacles: fixed, so the map can be learned. Some sit right on the road.
+  const DECOR = [
+    ["tree", 70, 84], ["tree", 130, 200], ["bush", 200, 122], ["rock", 262, 162], ["tree", 310, 92], ["rock2", 380, 128], ["bush", 420, 204],
+    ["tree", 470, 84], ["bush", 540, 196], ["rock2", 612, 168], ["bush", 660, 98], ["tree", 720, 198], ["rock", 780, 124], ["tree", 830, 86], ["bush", 870, 206], ["rock", 900, 150],
+  ];
+  const FOOT = { tree: [5, 12, 8, 4], bush: [2, 10, 14, 5], rock: [2, 8, 14, 5], rock2: [2, 10, 20, 5] };
+  DECOR.forEach(([s, x, y]) => { add([sprite(s), pos(x, y), anchor("topleft"), z(3 + y / 1000)]); const f = FOOT[s]; wall(x + f[0], y + f[1], f[2], f[3]); });
+
+  let sx = 20, sy = RY + 4;
+  if (opts.from === "east") sx = ROAD_W - 46;
+  if (opts.resume && opts.at) { sx = opts.at.x; sy = opts.at.y; }
+  const player = makePlayer(sx, sy);
+  makeFollowers(player);
+  player.onUpdate(() => { camPos(Math.max(W / 2, Math.min(ROAD_W - W / 2, player.pos.x + 12)), H / 2); });
+  player.onCollide("west", () => { if (!dialogOpen) go("town", { from: "east" }); });
+  player.onCollide("east", () => { if (!dialogOpen) go("town2", { from: "west" }); });
+  wireTalk(player); wireMenu(); hud();
+
+  npc("sign", 40, 126, "sign", () => say(["* EAST: the next town. WEST: home.", "* Somebody scratched under it, fresh: 'THE KING WENT THIS WAY ->'"]), { footY: 10 });
+
+  // MR. BLOOP, sitting in the middle of the road
+  if (!(state.party || []).includes("bloop")) {
+    const bl = npc("bloop", 500, RY + 10, "bloop", meetBloop, { footY: 10 });
+    add([rect(30, RH), pos(486, RY), area(), opacity(0), "bloopzone"]);
+    let met = false;
+    player.onCollide("bloopzone", () => { if (!dialogOpen && !met) meetBloop(); });
+    function meetBloop() {
+      if (met) return; met = true;
+      say([
+        "???: bloop.",
+        "* A round, ringed creature is sitting in the middle of the road. It has no arms. It has a ring, like a tiny planet.",
+        "MR. BLOOP: You are the sword kid. Bloop saw the King. Bloop did not like the King.",
+        "MR. BLOOP: He went EAST. To the town with the hole in the hill. He was laughing. Bloop does not laugh.",
+        "MR. BLOOP: Bloop is coming. Bloop can only kick. Bloop kicks GOOD.",
+        "* MR. BLOOP joined the party!",
+      ], () => {
+        destroy(bl); destroyAll("bloopzone");
+        state.party = [...(state.party || []), "bloop"]; partyHpInit(); music.sfx("pickup"); save("road");
+        makeFollowers(player);
+      });
+    }
+  }
+
+  // the strays
+  const ROAMERS = [["roadswoop", 300, 110], ["roadstomp", 700, 206], ["roadswoop", 860, 112]];
+  const grace = time() + (opts.resume ? 1.5 : 0);
+  ROAMERS.forEach(([key, x, y], i) => { if (!ROAM_DONE.has(i)) roamer(key, i, x, y, player, grace); });
+  player.onCollide("roamer", (e) => {
+    if (dialogOpen || window.__frozen) return;
+    window.__frozen = true; music.play("danger"); music.sfx("bang");
+    say(ENEMIES[e.enemyName].meet, () => go("battle", e.enemyName, { map: "road", roamer: e.roamId, at: { x: player.pos.x, y: player.pos.y } }));
+  });
+
+  if (!opts.resume) wait(0.3, () => say(opts.from === "east"
+    ? ["* The road home. Something is moving in the grass."]
+    : (state.party || []).includes("bloop") ? ["* The road east. The strays are still out here."]
+    : ["* The road east. Trees, rocks, and something moving in the grass.", "* The King's footprints go this way."]));
 });
 
 
@@ -1575,7 +1955,7 @@ const ENEMIES = {
       { t: "tried to look scary.", d: [0, 0] },
     ],
     win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open."],
-    next: () => { state.beatBugon = true; state.hp = state.maxHp; state.pp = state.maxPp; go("cave", { resume: true }); },
+    next: () => { state.beatBugon = true; fullHeal(); go("cave", { resume: true }); },
     mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["mashB", "block", "wait"], pick: "random", speed: 1.2, zone: 0.28, fakeouts: 1, double: 0.3 },
   },
   lygon: {
@@ -1595,7 +1975,7 @@ const ENEMIES = {
       "* LYGON folded up like a lawn chair and vanished in a puff of confetti.",
       "* Two cage doors swung open.",
     ],
-    next: () => { state.beatLygon = true; go("end"); },
+    next: () => { state.beatLygon = true; state.party = ["sis", "bro"]; fullHeal(); save("cave"); go("cave", { resume: true }); },
     mini: {
       attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.26, pick: "phase",
       phases: [{ above: 0.66, defend: "block" }, { above: 0.33, defend: "wait", fakeouts: 2 }, { above: 0, defend: "mashB", flurry: true }],
@@ -1652,6 +2032,41 @@ const ENEMIES = {
     win: ["* BATTY flapped once, twice, and dropped into a sitting position.", "Doctor: Dr. Okafor. I'm the town doctor. I remember... a purple light in my window...", "Doctor: Thank you. Truly. Now go finish this. She's right through that door.", "* The doctor ran off. Behind you, the seal on the door went dark."], small: true,
     mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], fakeouts: 3, speed: 1.5, zone: 0.25 },
   },
+  // -------- the trouble house. Two neighbours the King raised; fought together, then never again.
+  fenn: {
+    name: "MR. FENN", spr: "stomper1", hp: 28, weak: "ice", bg: [44, 30, 34], band: [66, 46, 50], zone: "house2", small: true,
+    intro: ["* MR. FENN and OLD BEA turned on you! Their eyes are purple.", "The King: RISE."],
+    attacks: [{ t: "swung a mailbag at %n!", d: [3, 6] }, { t: "stomped toward %n!", d: [3, 5] }, { t: "sorted invisible letters.", d: [0, 0] }],
+    down: ["* MR. FENN sat down hard. The purple faded from his eyes."],
+    win: ["* Both of them are down, blinking, rubbing their eyes.", "Mr. Fenn: ...did I deliver something? I feel like I delivered something.", "Old Bea: My BREAD. Somebody check on my BREAD."],
+    next: () => go("house2", { after: true }),
+    mini: { attack: "mash", defend: ["block"], speed: 1.0, zone: 0.32 },
+  },
+  bea: {
+    name: "OLD BEA", spr: "swooper1", hp: 28, weak: "fire", bg: [44, 30, 34], band: [66, 46, 50], zone: "house2", small: true,
+    attacks: [{ t: "swooped at %n with a rolling pin!", d: [3, 6] }, { t: "threw a hot bun at %n!", d: [2, 5] }, { t: "hung from the light fixture.", d: [0, 0] }],
+    down: ["* OLD BEA fluttered down onto the couch and stayed there."],
+    mini: { attack: "timing", defend: ["wait"], fakeouts: 0, speed: 1.0, zone: 0.32 },
+  },
+  // -------- strays on the road east: hers, but far from her, and weaker for it
+  roadswoop: {
+    name: "STRAY SWOOPER", spr: "swooper2", hp: 20, weak: "fire", bg: [30, 50, 40], band: [46, 72, 58], zone: "road", small: true,
+    meet: ["* Something with ragged wings drops out of a tree.", "* It's one of hers. It saw you first."],
+    intro: ["* The STRAY SWOOPER circles overhead!"],
+    attacks: [{ t: "swooped at %n!", d: [3, 6] }, { t: "screeched at %n!", d: [2, 4] }, { t: "flapped in a circle.", d: [0, 0] }],
+    win: ["* The STRAY SWOOPER tumbled into the grass, sat up, and blinked brown eyes.", "* It wandered off toward the east town, rubbing its head."],
+    next: (o) => roamWin(o),
+    mini: { attack: "timing", defend: ["wait"], fakeouts: 0, speed: 1.1, zone: 0.3 },
+  },
+  roadstomp: {
+    name: "STRAY STOMPER", spr: "stomper2", hp: 18, weak: "ice", bg: [30, 50, 40], band: [46, 72, 58], zone: "road", small: true,
+    meet: ["* Heavy footsteps behind the bushes. Purple eyes.", "* It's one of hers. It saw you first."],
+    intro: ["* The STRAY STOMPER stomped out of the grass!"],
+    attacks: [{ t: "stomped at %n!", d: [3, 6] }, { t: "shoved %n!", d: [2, 5] }, { t: "looked for something it dropped.", d: [0, 0] }],
+    win: ["* The STRAY STOMPER sat down in the road and the purple went out of its eyes.", "* It got up and walked off toward the east town, very confused."],
+    next: (o) => roamWin(o),
+    mini: { attack: "mash", defend: ["block"], speed: 1.1, zone: 0.3 },
+  },
   malva: {
     name: "MALAGORE", spr: "malva", hp: 140, weak: "fire", bg: [16, 4, 30], band: [40, 12, 66], zone: "hollow", scale: 1.6,
     meet: ["* A tall figure in a black cloak sits on a stone chair. Above her, an ORB hangs in the air, glowing purple.", "* Inside the orb: your house. Your street. Your MOM, looking out the window.", "MALAGORE: Finally. Come closer. I like to see faces.", "* You drew the sword."],
@@ -1692,7 +2107,7 @@ const PSI = [
 // or B (BACK), and always ends on its own: a hard timer resolves it when nobody presses anything.
 // They decide how much an action does, never whether it happens.
 
-const TRACK = { x: 40, y: 173, w: 240, h: 11 };
+const TRACK = { x: 40, y: 171, w: 240, h: 11 };
 const MINI = "minigame";
 const C_BLUE = [96, 168, 255];
 const C_INK = [232, 232, 240], C_GOLD = [242, 208, 92], C_GREEN = [79, 176, 106], C_TEAL = [51, 199, 193], C_RED = [224, 69, 63], C_GREY = [138, 138, 153];
@@ -1913,43 +2328,81 @@ function miniWait(o, done) {
   });
 }
 
-scene("battle", (which) => {
+// The battle is fought by a party: the hero first, then every friend who has joined. Each living
+// member acts in turn (its own little menu), then every living enemy acts, each picking a random
+// living member to hit; that member's defense minigame decides what lands. A member at 0 HP is
+// down until a Potion or the end of the fight; the party loses only when everyone is down.
+// `which` names the enemy (or "house2" for the pair, "ambush" for the side room); `bopts` carries
+// where a roaming fight came from so a win can put you back there.
+scene("battle", (which, bopts = {}) => {
   resetCam();
   window.__frozen = false;
-  let def = ENEMIES[which];
+  bopts = bopts || {};
+  let defs;
   if (which === "ambush") {
     const base = ENEMIES[state.branchEnemy];
-    def = { ...base, name: "WILD " + base.name, hp: base.hp + 8, small: true,
+    defs = [{ ...base, name: "WILD " + base.name, hp: base.hp + 8, small: true,
       intro: [`* A WILD ${base.name} got the jump on you!`],
       win: [`* The WILD ${base.name} ran off into the dark.`, "* The side room is quiet now."],
       // a wild one plays the base enemy's minigames, a fifth faster
       mini: { ...(base.mini || {}), speed: ((base.mini && base.mini.speed) || 1) * 1.2 },
-      next: () => { state.branchDone = true; state.hp = Math.min(state.maxHp, state.hp + 10); state.pp = Math.min(state.maxPp, state.pp + 6); go("cave", { resume: true, at: "branch" }); } };
-  }
-  if (def.tent) tentBackdrop(); // the big top's canvas and ring floor under everything else
+      next: () => { state.branchDone = true; healAll(10); state.pp = Math.min(state.maxPp, state.pp + 6); go("cave", { resume: true, at: "branch" }); } }];
+  } else if (which === "house2") defs = [ENEMIES.fenn, ENEMIES.bea];
+  else defs = [ENEMIES[which]];
+  const lead = defs[0], zone = lead.zone || "cave", inHollow = zone === "hollow";
+  if (lead.tent) tentBackdrop(); // the big top's canvas and ring floor under everything else
   music.sfx("battle_start");
-  music.play(def.small ? "battle" : "boss");
-  const boss = { name: def.name, hp: def.hp, maxHp: def.hp, frozen: 0 };
-  const mini = def.mini || { attack: "timing", defend: ["block"] };
-  let busy = true;
-  let menu = 0, sub = null, subIdx = 0, defTurn = 0;
-  const OPTIONS = ["Slash", "PSI", "Item", "Run"];
+  music.play(lead.small ? "battle" : "boss");
 
-  add([rect(W, H), pos(0, 0), color(...def.bg)]);
+  // ---- the party
+  const members = [];
+  const mhp = (m) => m.name === "hero" ? state.hp : (state.partyHp[m.name] ?? PARTY_MAX[m.name]);
+  const mmax = (m) => m.name === "hero" ? state.maxHp : PARTY_MAX[m.name];
+  const setHp = (m, v) => { v = Math.max(0, Math.min(mmax(m), Math.round(v))); if (m.name === "hero") state.hp = v; else state.partyHp[m.name] = v; };
+  const alive = (m) => mhp(m) > 0;
+  function buildMembers() {
+    partyHpInit(); members.length = 0;
+    members.push({ name: "hero", label: state.name, focus: false });
+    fighters().forEach((n) => members.push({ name: n, label: PARTY_LABEL[n], focus: false }));
+  }
+  buildMembers();
+  // three or more fighters make her people, the house pair and the road's strays tougher. The cave stays as it was.
+  const hpScale = zone !== "cave" && (members.length >= 3 || which === "house2") ? 1.35 : 1;
+  const dmgScale = () => (zone !== "cave" && members.length >= 3 ? 1.2 : 1);
+
+  // ---- the enemies
+  const BY = 80; // they stand a little high so the minigame strip fits under their HP bars
+  const foes = defs.map((d, i) => ({ def: d, name: d.name, hp: Math.round(d.hp * hpScale), maxHp: Math.round(d.hp * hpScale), frozen: 0, alive: true, defTurn: 0,
+    mini: d.mini || { attack: "timing", defend: ["block"] }, x: defs.length === 1 ? W / 2 : W / 2 - 64 + i * 128 }));
+  let busy = true, cur = null, actor = 0, targeting = null, defending = null, pending = null;
+  let menu = 0, sub = null, subIdx = 0, targetIdx = 0, allyIdx = 0;
+  // read-only view of the fight for tests and tinkering
+  window.rbBattle = { which, foes, members, hpScale, get dmgScale() { return dmgScale(); }, lastRoll: null, lastTarget: null, get cur() { return cur && cur.name; }, get busy() { return busy; }, get sub() { return sub; }, get targeting() { return targeting && targeting.name; } };
+  let barged = state.friends || which !== "house2";
+
+  add([rect(W, H), pos(0, 0), color(...lead.bg)]);
   const bands = [];
-  for (let i = 0; i < 12; i++) bands.push(add([rect(W, 10), pos(0, i * 20), color(...def.band), opacity(0.5), z(1)]));
+  for (let i = 0; i < 12; i++) bands.push(add([rect(W, 10), pos(0, i * 20), color(...lead.band), opacity(0.5), z(1)]));
   onUpdate(() => bands.forEach((b, i) => { b.pos.y = ((i * 20 + time() * 25) % (H + 20)) - 10; }));
 
-  const BY = 80; // the enemy stands a little high so the minigame strip fits under its HP bar
-  const bossSpr = add([sprite(def.spr), pos(W / 2, BY), anchor("center"), scale(def.scale || 2), z(5)]);
-  bossSpr.onUpdate(() => {
-    if (defending) { bossSpr.pos.y = BY + 10 + Math.abs(Math.sin(time() * 10)) * 8; bossSpr.pos.x = W / 2 + rand(-2, 2); return; }
-    if (!busy && !boss.frozen) bossSpr.pos.y = BY + Math.sin(time() * 3) * 2;
+  foes.forEach((f) => {
+    f.spr = add([sprite(f.def.spr), pos(f.x, BY), anchor("center"), scale(f.def.scale || 2), z(5), opacity(1)]);
+    f.spr.onUpdate(() => {
+      if (!f.alive) return;
+      if (defending === f) { f.spr.pos.y = BY + 10 + Math.abs(Math.sin(time() * 10)) * 8; f.spr.pos.x = f.x + rand(-2, 2); return; }
+      if (!busy && !f.frozen) f.spr.pos.y = BY + Math.sin(time() * 3 + f.x) * 2;
+    });
+    const frost = add([rect(defs.length === 1 ? 90 : 70, 84), pos(f.x, BY), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
+    frost.onUpdate(() => { frost.opacity = f.frozen > 0 && f.alive ? 0.35 : 0; });
+    const bw = defs.length === 1 ? 100 : 90;
+    add([rect(bw, 6), pos(f.x - bw / 2, 146), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
+    const bar = add([rect(bw, 6), pos(f.x - bw / 2, 146), color(224, 69, 63), z(21), "foebar"]);
+    bar.onUpdate(() => { bar.width = bw * Math.max(0, f.hp) / f.maxHp; });
+    add([text(f.name, { size: 8 }), pos(f.x, 136), anchor("center"), color(232, 232, 240), z(21), "foename"]);
   });
-  const frost = add([rect(90, 84), pos(W / 2, BY), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
-  frost.onUpdate(() => { frost.opacity = boss.frozen > 0 ? 0.35 : 0; });
   // MALAGORE sits under the ORB: it hangs behind her, spinning slowly, pulsing purple, and burns at low HP
   if (which === "malva") {
+    const boss = foes[0];
     const oglow = add([circle(30), pos(W / 2, BY - 56), color(199, 123, 214), opacity(0.25), z(3), "orbglow"]);
     const orb = add([sprite("orb"), pos(W / 2, BY - 56), anchor("center"), scale(1.4), rotate(0), z(4), "orb"]);
     orb.onUpdate(() => {
@@ -1960,57 +2413,107 @@ scene("battle", (which) => {
       oglow.opacity = (low ? 0.4 : 0.18) + 0.14 * Math.abs(Math.sin(t * (low ? 7 : 2.5)));
       oglow.radius = 26 + 6 * Math.abs(Math.sin(t * 2.5));
     });
-    // stray purple motes drifting up out of it
     loop(0.25, () => add([rect(2, 2), pos(W / 2 + rand(-16, 16), BY - 50), color(199, 123, 214), z(4), opacity(0.9), lifespan(0.8, { fade: 0.5 }), move(UP, rand(10, 26))]));
   }
-  // captive siblings in the final fight
+  // captive siblings in the circus fight
   if (which === "lygon") {
     add([sprite("sis"), pos(40, 60), anchor("topleft"), z(4)]);
     add([sprite("bro"), pos(W - 60, 60), anchor("topleft"), z(4)]);
     [40, W - 60].forEach((x) => { for (let i = 0; i < 4; i++) add([rect(1, 30), pos(x - 2 + i * 6, 56), color(140, 140, 150), z(5)]); });
   }
+  // the King watches the house fight from the doorway, hand raised
+  if (which === "house2") {
+    const k = add([sprite("king"), pos(W - 30, 96), anchor("center"), z(4), "king"]);
+    const hand = add([circle(5), pos(W - 12, 82), color(199, 123, 214), opacity(0.6), z(5)]);
+    hand.onUpdate(() => { hand.opacity = 0.4 + 0.3 * Math.abs(Math.sin(time() * 5)); k.pos.y = 96 + Math.sin(time() * 1.5); });
+  }
 
-  // player panel
-  const PY = H - 54; // panels hug the bottom edge, clear of the enemy name and HP bar
+  // ---- the party row: back views along the bottom, each with a small HP bar; the acting one bounces
+  const PY = H - 54;
   add([rect(110, 46, { radius: 3 }), pos(10, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
-  add([text(state.name, { size: 8 }), pos(18, PY + 8), color(242, 208, 92), z(21)]);
-  const hpT = add([text("", { size: 8 }), pos(18, PY + 20), color(232, 232, 240), z(21)]);
-  const ppT = add([text("", { size: 8 }), pos(18, PY + 31), color(51, 199, 193), z(21)]);
-  let shownHp = state.hp;
-  hpT.onUpdate(() => {
-    shownHp += Math.sign(state.hp - shownHp) * Math.min(Math.abs(state.hp - shownHp), 30 * dt());
-    hpT.text = `HP ${Math.round(shownHp)}/${state.maxHp}`;
-    ppT.text = `PP ${state.pp}/${state.maxPp}`;
+  function buildRow() {
+    destroyAll("prow");
+    const n = members.length, slot = Math.min(22, 104 / n);
+    members.forEach((m, i) => {
+      const cx = Math.round(65 - (n * slot) / 2 + slot * (i + 0.5));
+      m.cx = cx;
+      const s = add([sprite(m.name + "_b"), pos(cx, PY + 3), anchor("top"), z(22), opacity(1), "prow", "partysprite"]);
+      s.member = m.name;
+      add([rect(16, 3), pos(cx - 8, PY + 33), color(60, 60, 80), z(22), "prow"]);
+      const bar = add([rect(16, 3), pos(cx - 8, PY + 33), color(...C_GREEN), z(23), "prow"]);
+      const num = add([text("", { size: 8 }), pos(cx, PY + 37), anchor("top"), color(...C_INK), z(23), "prow"]);
+      s.onUpdate(() => {
+        const hp = mhp(m), down = hp <= 0, ratio = hp / mmax(m);
+        bar.width = 16 * ratio; bar.color = ratio > 0.5 ? rgb(...C_GREEN) : ratio > 0.25 ? rgb(...C_GOLD) : rgb(...C_RED);
+        num.text = `${hp}`; num.color = down ? rgb(...C_GREY) : rgb(...C_INK);
+        s.opacity = down ? 0.35 : 1;
+        const acting = !busy && !dialogOpen && cur === m;
+        s.pos.y = PY + 3 + (down ? 4 : 0) - (acting ? Math.abs(Math.sin(time() * 8)) * 4 : 0);
+      });
+    });
+  }
+  buildRow();
+  // a blue arrow says who the enemy is coming for; a gold one is your own pick (enemy or ally)
+  const tArrow = add([text("v", { size: 8 }), pos(0, 0), anchor("center"), color(...C_BLUE), z(40), "targetarrow"]);
+  const pArrow = add([text("v", { size: 10 }), pos(0, 0), anchor("center"), color(...C_GOLD), z(40), "pickarrow"]);
+  onUpdate(() => {
+    tArrow.hidden = !targeting;
+    if (targeting) tArrow.pos = vec2(targeting.cx, PY - 3 - Math.abs(Math.sin(time() * 8)) * 3);
+    let p = null;
+    if (!busy && !dialogOpen) {
+      if (sub === "target") p = vec2(foes[targetIdx].x, BY - 48);
+      else if (sub === "ally") p = vec2(members[allyIdx].cx, PY - 3);
+    }
+    pArrow.hidden = !p;
+    if (p) pArrow.pos = p.add(0, -Math.abs(Math.sin(time() * 8)) * 3);
   });
 
-  add([rect(100, 6), pos(W / 2 - 50, 146), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
-  const ebar = add([rect(100, 6), pos(W / 2 - 50, 146), color(224, 69, 63), z(21)]);
-  ebar.onUpdate(() => { ebar.width = 100 * Math.max(0, boss.hp) / boss.maxHp; });
-  add([text(boss.name, { size: 8 }), pos(W / 2, 136), anchor("center"), color(232, 232, 240), z(21)]);
-  const inHollow = def.zone === "hollow";
-  if (def.small && which !== "ambush") add([text(inHollow ? `hollow ${state.hollow + 1} / ${HOLLOW_ORDER.length}` : `cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
-
+  // ---- the menu
   const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
   const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
   const cursor = add([text(">", { size: 8 }), pos(0, 0), color(242, 208, 92), z(22)]);
-  const hint = add([text("", { size: 8 }), pos(220, PY - 10), anchor("center"), color(207, 207, 216), z(22)]);
+  const who = add([text("", { size: 8 }), pos(130, PY - 10), color(232, 232, 240), z(22)]);
+  const hint = add([text("", { size: 8 }), pos(310, PY - 10), anchor("topright"), color(207, 207, 216), z(22)]);
 
+  function options() {
+    if (!cur) return [];
+    switch (cur.name) {
+      case "pip": return ["Potion", "Fizz Bomb", "Item", ""];
+      case "zed": return ["Zip Gun", "Rocket", "Item", ""];
+      case "bruno": return ["Punch", "Kick", "Focus", ""];
+      case "bloop": return ["Kick", "", "", ""];
+      default: return ["Slash", "PSI", "Item", "Run"];
+    }
+  }
   function labels() {
     if (sub === "psi") return PSI.map((p) => `${p.name} ${p.pp}`).concat(["Back"]);
     if (sub === "item") return [`Cookie x${state.cookies}`, `Juice x${state.juice}`, "Back", ""];
-    return OPTIONS;
+    if (sub === "target") return [`Hit who?  < ${foes[targetIdx].name} >`, "", "", ""];
+    if (sub === "ally") return [`Heal who?  < ${members[allyIdx].label} >`, "", "", ""];
+    return options().map((o) => (o === "Rocket" ? `Rocket x${state.rockets}` : o));
   }
   onUpdate(() => {
     const hide = busy || dialogOpen;
-    menuBox.hidden = hide; cursor.hidden = hide; hint.hidden = hide;
+    menuBox.hidden = hide; cursor.hidden = hide;
     const L = labels();
-    slots.forEach((s, i) => { s.hidden = hide; s.text = L[i] || ""; });
-    cursor.pos = slots[sub ? subIdx : menu].pos.add(-9, 0);
-    hint.text = sub === "psi" ? `${boss.name} hates ${def.weak.toUpperCase()}!` : sub === "item" ? "Cookie +15   Juice = full" : "";
+    slots.forEach((s, i) => { s.hidden = hide; s.text = L[i] || ""; s.color = rgb(232, 232, 240); });
+    if (cur && cur.name === "bloop" && !sub) { slots[2].text = "(Bloop has no other ideas.)"; slots[2].color = rgb(...C_GREY); }
+    cursor.pos = slots[sub === "target" || sub === "ally" ? 0 : sub ? subIdx : menu].pos.add(-9, 0);
+    const live = foes.filter((f) => f.alive), tune = live[0] || foes[0];
+    who.hidden = hide || (sub && sub !== "target" && sub !== "ally");
+    who.text = cur ? `${cur.label}  HP ${mhp(cur)}/${mmax(cur)}` + (cur.name === "hero" ? `  PP ${state.pp}/${state.maxPp}` : cur.focus ? "  FOCUSED" : "") : "";
+    hint.hidden = hide || !sub || sub === "target" || sub === "ally";
+    hint.text = sub === "psi" ? `${tune.name} hates ${tune.def.weak.toUpperCase()}!` : sub === "item" ? "Cookie +15   Juice = full" : "";
   });
 
   function nav(dx, dy) {
     if (busy || dialogOpen) return;
+    if (sub === "target") {
+      const idxs = foes.map((f, i) => (f.alive ? i : -1)).filter((i) => i >= 0);
+      if (dx && idxs.length > 1) { const k = idxs.indexOf(targetIdx); targetIdx = idxs[(k + dx + idxs.length) % idxs.length]; music.sfx("move"); }
+      return;
+    }
+    if (sub === "ally") { if (dx) { allyIdx = (allyIdx + dx + members.length) % members.length; music.sfx("move"); } return; }
     const L = labels().filter((x) => x);
     let idx = sub ? subIdx : menu;
     if (dx === -1 && idx % 2 === 1) idx -= 1;
@@ -2024,46 +2527,97 @@ scene("battle", (which) => {
   ["right", "d", "6"].forEach((k) => onKeyPress(k, () => nav(1, 0)));
   ["up", "w", "8"].forEach((k) => onKeyPress(k, () => nav(0, -1)));
   ["down", "s", "2"].forEach((k) => onKeyPress(k, () => nav(0, 1)));
-  BACK.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen && sub) { sub = null; subIdx = 0; music.sfx("back"); } }));
+  BACK.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen && sub) { sub = null; subIdx = 0; pending = null; music.sfx("back"); } }));
   INTERACT.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen) confirm(); }));
 
-  // which minigame decides the power of this action, per the enemy's tuning
-  function attackKind(action) {
-    const a = mini.attack || "timing";
-    return typeof a === "string" ? a : (a[action] || "timing");
+  // ---- the turn order
+  function startRound() { actor = 0; nextActor(); }
+  function nextActor() {
+    while (actor < members.length && !alive(members[actor])) actor++;
+    if (actor >= members.length) {
+      cur = null; busy = true;
+      // the friends barge into the house fight after your first turn
+      if (!barged) { barged = true; bargeIn(enemiesTurn); } else enemiesTurn();
+      return;
+    }
+    cur = members[actor]; menu = 0; sub = null; subIdx = 0; pending = null; busy = false;
   }
-  // the player's power minigame; done(multiplier, grade)
-  function powerUp(action, done) {
-    const kind = attackKind(action), speed = mini.speed || 1;
-    const zone = (mini.zone || 0.3) * (action === "ice" ? 0.65 : 1); // ice asks for a steadier hand
-    telegraph(`${state.name} ATTACKS!`, () => {
-    if (kind === "mash") miniCue("mash", C_GOLD, () => miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r))));
-    else if (kind === "sequence") miniCue("sequence", C_GOLD, () => miniSequence({ speed, zone }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss")));
-    else miniCue("timing", C_GOLD, () => miniTiming({ speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
-    }, C_GOLD);
+  function actionDone() { busy = true; actor++; nextActor(); }
+
+  function bargeIn(cb) {
+    music.sfx("bang"); shake(16);
+    add([text("BANG!", { size: 18 }), pos(W - 50, 104), anchor("center"), color(...C_GOLD), z(60), opacity(1), lifespan(0.9, { fade: 0.4 }), move(UP, 12)]);
+    const names = ["pip", "zed", "bruno"];
+    const sprs = names.map((n, i) => add([sprite(n), pos(W + 20 + i * 26, 122 - i * 3), anchor("center"), z(40), "barge"]));
+    sprs.forEach((s, i) => tween(s.pos.x, W / 2 + 26 + i * 30, 0.6 + i * 0.1, (x) => { s.pos.x = x; }, easings.easeOutQuad));
+    wait(0.8, () => say([
+      "* The door BANGED open!",
+      "Pip: I brought potions!",
+      "Zed: Stand back, I've got a zip gun!",
+      "Bruno: HYAAA!",
+      "* PIP, ZED and BRUNO jumped into the fight!",
+    ], () => {
+      state.party = ["pip", "zed", "bruno"]; state.rockets = 3; partyHpInit();
+      destroyAll("barge"); buildMembers(); buildRow(); music.sfx("pickup");
+      cb();
+    }));
   }
 
+  // ---- your side's actions
+  const tune = () => foes.find((f) => f.alive) || foes[0];
+  // which minigame decides the power of this action, per the enemy's tuning
+  function attackKind(action) {
+    const a = tune().mini.attack || "timing";
+    return typeof a === "string" ? a : (a[action] || "timing");
+  }
+  // a power minigame for `label`; done(multiplier, grade)
+  function power(kind, label, done, o = {}) {
+    const m = tune().mini, speed = m.speed || 1;
+    const zoneW = (m.zone || 0.3) * (o.zoneMul || 1);
+    telegraph(`${label} ${o.verb || "ATTACKS!"}`, () => {
+      if (kind === "mash") miniCue("mash", C_GOLD, () => miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r))));
+      else if (kind === "sequence") miniCue("sequence", C_GOLD, () => miniSequence({ speed, zone: zoneW }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss")));
+      else miniCue("timing", C_GOLD, () => miniTiming({ prompt: "TAP A!", speed, zone: zoneW, zones: m.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
+    }, C_GOLD);
+  }
+  // pick an enemy (left/right) when there is more than one to pick from
+  function pickTarget(act) {
+    const live = foes.filter((f) => f.alive);
+    if (live.length <= 1) { busy = true; act(live[0] || foes[0]); return; }
+    pending = act; sub = "target"; targetIdx = foes.indexOf(live[0]);
+  }
+  function pickAlly(act) {
+    pending = act; sub = "ally";
+    let best = 0; members.forEach((m, i) => { if (mhp(m) / mmax(m) < mhp(members[best]) / mmax(members[best])) best = i; });
+    allyIdx = best;
+  }
+  const roll = (a, b, mult) => Math.max(1, Math.round(randi(a, b) * mult));
+
   function confirm() {
+    if (sub === "target") { const act = pending; pending = null; sub = null; busy = true; music.sfx("select"); act(foes[targetIdx]); return; }
+    if (sub === "ally") { const act = pending; pending = null; sub = null; busy = true; music.sfx("select"); act(members[allyIdx]); return; }
     if (sub === "psi") {
       if (subIdx === 3) { sub = null; subIdx = 0; music.sfx("back"); return; }
       const p = PSI[subIdx];
       if (state.pp < p.pp) { music.sfx("back"); say([`* Not enough PP for ${p.name}. (needs ${p.pp})`]); return; }
-      sub = null; subIdx = 0; busy = true;
+      sub = null; subIdx = 0;
       music.sfx("select");
-      state.pp -= p.pp;
-      powerUp(p.kind, (mult, grade) => {
-        music.sfx("psi_" + p.kind);
-        let dmg = Math.max(1, Math.round(randi(p.dmg[0], p.dmg[1]) * mult));
-        const weak = p.kind === def.weak;
-        if (weak) dmg = Math.round(dmg * 1.5);
-        if (p.kind === "star") {
-          shake(20);
-          for (let i = 0; i < 14; i++) add([text("*", { size: 12 }), pos(rand(40, W - 40), rand(-10, 60)), color(242, 208, 92), z(40), opacity(1), lifespan(0.6), move(DOWN, 200)]);
-        }
-        if (p.kind === "fire") for (let i = 0; i < 10; i++) add([rect(3, 3), pos(W / 2 + rand(-30, 30), BY + rand(-30, 30)), color(239, 143, 60), z(40), opacity(1), lifespan(0.5), move(UP, rand(40, 90))]);
-        // a perfect Ice always freezes; a shakier one sometimes does
-        if (p.freeze && (grade === "perfect" || Math.random() < (grade === "good" ? 0.6 : 0.3))) boss.frozen = 1;
-        hitBoss(dmg, p.verb + (grade === "perfect" ? " PERFECT!" : "") + (weak ? " SUPER effective!" : "") + (p.freeze && boss.frozen ? ` ${boss.name} is frozen solid!` : ""));
+      pickTarget((f) => {
+        state.pp -= p.pp;
+        power(attackKind(p.kind), state.name, (mult, grade) => {
+          music.sfx("psi_" + p.kind);
+          let dmg = roll(p.dmg[0], p.dmg[1], mult);
+          const weak = p.kind === f.def.weak;
+          if (weak) dmg = Math.round(dmg * 1.5);
+          if (p.kind === "star") {
+            shake(20);
+            for (let i = 0; i < 14; i++) add([text("*", { size: 12 }), pos(rand(40, W - 40), rand(-10, 60)), color(242, 208, 92), z(40), opacity(1), lifespan(0.6), move(DOWN, 200)]);
+          }
+          if (p.kind === "fire") for (let i = 0; i < 10; i++) add([rect(3, 3), pos(f.x + rand(-30, 30), BY + rand(-30, 30)), color(239, 143, 60), z(40), opacity(1), lifespan(0.5), move(UP, rand(40, 90))]);
+          // a perfect Ice always freezes; a shakier one sometimes does
+          if (p.freeze && (grade === "perfect" || Math.random() < (grade === "good" ? 0.6 : 0.3))) f.frozen = 1;
+          hit([{ foe: f, dmg }], state.name, p.verb + (grade === "perfect" ? " PERFECT!" : "") + (weak ? " SUPER effective!" : "") + (p.freeze && f.frozen ? ` ${f.name} is frozen solid!` : ""));
+        }, { zoneMul: p.kind === "ice" ? 0.65 : 1 }); // ice asks for a steadier hand
       });
       return;
     }
@@ -2072,134 +2626,209 @@ scene("battle", (which) => {
       if (subIdx === 0) {
         if (state.cookies <= 0) { music.sfx("back"); say(["* No cookies left!"]); return; }
         music.sfx("heal");
-        state.cookies -= 1; const heal = Math.min(state.maxHp - state.hp, 15); state.hp += heal;
-        sub = null; menu = 0; busy = true; say([`* ${state.name} ate a Cookie. +${heal} HP!`], enemyTurn); return;
+        state.cookies -= 1; const was = mhp(cur); setHp(cur, was + 15);
+        sub = null; menu = 0; busy = true; say([`* ${cur.label} ate a Cookie. +${mhp(cur) - was} HP!`], actionDone); return;
       }
       if (state.juice <= 0) { music.sfx("back"); say(["* No juice left!"]); return; }
       music.sfx("heal");
-      state.juice -= 1; const heal = state.maxHp - state.hp; state.hp = state.maxHp;
-      sub = null; menu = 0; busy = true; say([`* ${state.name} drank the Juice Box. +${heal} HP! Full health!`], enemyTurn); return;
+      state.juice -= 1; const was = mhp(cur); setHp(cur, mmax(cur));
+      sub = null; menu = 0; busy = true; say([`* ${cur.label} drank the Juice Box. +${mhp(cur) - was} HP! Full health!`], actionDone); return;
     }
-    const o = OPTIONS[menu];
-    menu = 0; // next turn starts on Slash: mashing A can never chain Item or PSI
+    const o = options()[menu];
+    if (!o) return;
+    menu = 0; // next action starts on the first option: mashing A can never chain Item or PSI
     music.sfx("select");
     if (o === "PSI") { sub = "psi"; subIdx = 0; return; }
     if (o === "Item") { sub = "item"; subIdx = 0; return; }
-    busy = true;
+    const me = cur;
     if (o === "Slash") {
-      powerUp("slash", (mult, grade) => {
+      pickTarget((f) => power(attackKind("slash"), state.name, (mult, grade) => {
         music.sfx("slash");
         const crit = Math.random() < (grade === "perfect" ? 0.3 : 0.15);
-        const dmg = Math.max(1, Math.round((state.giantSword ? randi(12, 18) : randi(8, 12)) * mult)) * (crit ? 2 : 1);
-        add([rect(state.giantSword ? 70 : 40, state.giantSword ? 5 : 3), pos(W / 2, BY), anchor("center"), color(244, 241, 234), rotate(-40), z(40), opacity(1), lifespan(0.15)]);
+        const dmg = (state.giantSword ? roll(12, 18, mult) : roll(8, 12, mult)) * (crit ? 2 : 1);
+        add([rect(state.giantSword ? 70 : 40, state.giantSword ? 5 : 3), pos(f.x, BY), anchor("center"), color(244, 241, 234), rotate(-40), z(40), opacity(1), lifespan(0.15)]);
         const verb = state.giantSword ? (crit ? "swung the GIANT SWORD in a huge arc!" : "swung the GIANT SWORD!") : (crit ? "did a HUGE spinning slash!" : "slashed with the sword!");
-        hitBoss(dmg, verb + (grade === "perfect" ? " PERFECT!" : ""));
-      });
+        hit([{ foe: f, dmg }], state.name, verb + (grade === "perfect" ? " PERFECT!" : ""));
+      }));
     } else if (o === "Run") {
-      say(["* You tried to run.", `* Then you remembered ${state.sis} and ${state.bro}. You did not run.`], enemyTurn);
+      busy = true;
+      say(["* You tried to run.", `* Then you remembered ${state.sis} and ${state.bro}. You did not run.`], actionDone);
+    } else if (o === "Potion") {
+      // Pip: heal one member (+18; a perfect throw +26 and shakes off the cold)
+      pickAlly((m) => power("timing", "Pip", (mult, grade) => {
+        music.sfx("heal");
+        const amt = grade === "perfect" ? 26 : 18, was = mhp(m);
+        setHp(m, was + amt);
+        for (let i = 0; i < 8; i++) add([rect(2, 2), pos(m.cx + rand(-8, 8), PY + rand(0, 20)), color(...C_TEAL), z(45), opacity(1), lifespan(0.6), move(UP, rand(20, 50))]);
+        say([`* Pip splashed a Potion on ${m.label}! +${mhp(m) - was} HP!` + (grade === "perfect" ? " PERFECT! Fizzy and cold, and the shivers are gone." : "") + (was <= 0 ? ` ${m.label} is back up!` : "")], actionDone);
+      }, { verb: "throws a POTION!" }));
+    } else if (o === "Fizz Bomb") {
+      // Pip: every enemy, 8-12
+      busy = true;
+      power("mash", "Pip", (mult) => {
+        music.sfx("psi_fire");
+        const live = foes.filter((f) => f.alive);
+        live.forEach((f) => { for (let i = 0; i < 8; i++) add([rect(3, 3), pos(f.x + rand(-30, 30), BY + rand(-30, 30)), color(...C_TEAL), z(40), opacity(1), lifespan(0.5), move(UP, rand(40, 90))]); });
+        hit(live.map((f) => ({ foe: f, dmg: roll(8, 12, mult) })), "Pip", "threw a FIZZ BOMB!");
+      }, { verb: "shakes a FIZZ BOMB!" });
+    } else if (o === "Zip Gun") {
+      // Zed: 10-14; a perfect double-tap is half again as much
+      pickTarget((f) => power("timing", "Zed", (mult, grade) => {
+        music.sfx("slash");
+        let dmg = roll(10, 14, 1);
+        if (grade === "perfect") dmg = Math.round(dmg * 1.5); else if (grade === "miss") dmg = Math.max(1, Math.round(dmg * 0.6));
+        add([rect(60, 2), pos(f.x - 30, BY), color(242, 208, 92), z(40), opacity(1), lifespan(0.12)]);
+        hit([{ foe: f, dmg }], "Zed", grade === "perfect" ? "double-tapped the ZIP GUN! PERFECT!" : "fired the ZIP GUN!");
+      }));
+    } else if (o === "Rocket") {
+      // Zed: a Bottle Rocket, three per run; 22-30 to one enemy
+      if (state.rockets <= 0) { music.sfx("back"); say(["* No bottle rockets left!", "Zed: I KNEW I should have brought more."]); return; }
+      pickTarget((f) => {
+        state.rockets -= 1;
+        power("sequence", "Zed", (mult) => {
+          music.sfx("boom"); shake(14);
+          for (let i = 0; i < 12; i++) add([rect(3, 3), pos(f.x + rand(-30, 30), BY + rand(-30, 30)), color(...choose([C_GOLD, C_RED, C_INK])), z(40), opacity(1), lifespan(0.6), move(UP, rand(30, 100))]);
+          hit([{ foe: f, dmg: roll(22, 30, mult) }], "Zed", "launched a BOTTLE ROCKET!");
+        }, { verb: "lights a ROCKET!" });
+      });
+    } else if (me.name === "bruno" && (o === "Punch" || o === "Kick")) {
+      // Bruno: Punch 9-13 (mash), Kick 14-18 (timing); a Focus doubles the next one
+      pickTarget((f) => power(o === "Punch" ? "mash" : "timing", "Bruno", (mult) => {
+        music.sfx("hit");
+        const focused = me.focus; me.focus = false;
+        const dmg = (o === "Punch" ? roll(9, 13, mult) : roll(14, 18, mult)) * (focused ? 2 : 1);
+        hit([{ foe: f, dmg }], "Bruno", (o === "Punch" ? "punched! HYAA!" : "kicked! HYAAA!") + (focused ? " FOCUSED! DOUBLE!" : ""));
+      }));
+    } else if (o === "Focus") {
+      busy = true; me.focus = true;
+      say(["* Bruno took a deep breath. His next hit will be DOUBLE."], actionDone);
+    } else if (me.name === "bloop" && o === "Kick") {
+      // Bloop: the one thing Bloop does
+      pickTarget((f) => power("mash", "Bloop", (mult) => {
+        music.sfx("hit");
+        hit([{ foe: f, dmg: roll(8, 12, mult) }], "Bloop", "kicked! GOOD kick!");
+      }));
     }
   }
 
-  if (def.small && !def.next) def.next = () => {
+  // ---- damage to enemies
+  const defaultNext = () => {
     const key = inHollow ? "hollow" : "cave";
     state[key] += 1;
-    state.hp = Math.min(state.maxHp, state.hp + 12);
+    healAll(12);
     state.pp = Math.min(state.maxPp, state.pp + 8);
     if (state[key] % 2 === 0) state.cookies += 1;
     go(key, { resume: true });
   };
-  function hitBoss(dmg, verb) {
-    boss.hp -= dmg; music.sfx("hit");
-    shake(8);
+  const finish = () => (lead.next ? lead.next(bopts) : defaultNext());
+  function hit(hits, who, verb) {
+    music.sfx("hit"); shake(8);
     add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.5), z(50), lifespan(0.08)]);
-    bossSpr.pos.x = W / 2 + 6;
-    wait(0.08, () => bossSpr.pos.x = W / 2);
-    add([text(`${dmg}`, { size: 14 }), pos(W / 2 + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), opacity(1), lifespan(0.8), move(UP, 30)]);
-    const lines = [`* ${state.name} ${verb} ${dmg} damage to ${boss.name}!`];
-    if (boss.hp <= 0) { music.sfx("win"); const done = inHollow ? state.hollow : state.cave; say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (done % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next); }
-    else say(lines, enemyTurn);
+    const lines = [];
+    hits.forEach((h) => {
+      const f = h.foe, dmg = Math.max(1, Math.round(h.dmg));
+      f.hp -= dmg;
+      f.spr.pos.x = f.x + 6;
+      wait(0.08, () => { if (f.spr.exists()) f.spr.pos.x = f.x; });
+      add([text(`${dmg}`, { size: 14 }), pos(f.x + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), opacity(1), lifespan(0.8), move(UP, 30)]);
+      lines.push(`* ${who} ${verb} ${dmg} damage to ${f.name}!`);
+    });
+    const downed = hits.map((h) => h.foe).filter((f) => f.hp <= 0 && f.alive);
+    downed.forEach((f) => { f.alive = false; f.hp = 0; f.frozen = 0; f.spr.opacity = 0.3; f.spr.color = rgb(120, 120, 140); });
+    if (foes.every((f) => !f.alive)) {
+      music.sfx("win");
+      const done = inHollow ? state.hollow : state.cave;
+      const bonus = lead.small && !lead.next ? ["* You feel a little stronger. +12 HP, +8 PP" + (done % 2 === 1 ? ", and you found a Cookie!" : "!")] : zone === "road" ? ["* Everyone feels a little stronger. +6 HP."] : [];
+      say(lines.concat(lead.win).concat(bonus), finish);
+    } else {
+      downed.forEach((f) => lines.push(...(f.def.down || [`* ${f.name} went down!`])));
+      say(lines, actionDone);
+    }
   }
+  const hitBoss = (dmg, verb) => hit([{ foe: tune(), dmg }], state.name, verb); // kept for anything that still calls it
 
-  // which defense the enemy's tuning calls for this turn
-  function currentPhase() {
-    if (mini.pick !== "phase" || !mini.phases) return null;
-    const f = boss.hp / boss.maxHp;
-    return mini.phases.find((p) => f > p.above) || mini.phases[mini.phases.length - 1];
+  // ---- the enemies' turns
+  function currentPhase(f) {
+    if (f.mini.pick !== "phase" || !f.mini.phases) return null;
+    const r = f.hp / f.maxHp;
+    return f.mini.phases.find((p) => r > p.above) || f.mini.phases[f.mini.phases.length - 1];
   }
-  function pickDefense() {
-    const ph = currentPhase();
+  function pickDefense(f) {
+    const ph = currentPhase(f);
     if (ph) return ph;
-    const list = mini.defend || ["block"];
-    const name = mini.pick === "cycle" ? list[defTurn % list.length] : mini.pick === "random" ? choose(list) : list[0];
-    return { defend: name, fakeouts: mini.fakeouts || 0, zones: mini.blockZones || 1 };
+    const list = f.mini.defend || ["block"];
+    const name = f.mini.pick === "cycle" ? list[f.defTurn % list.length] : f.mini.pick === "random" ? choose(list) : list[0];
+    return { defend: name, fakeouts: f.mini.fakeouts || 0, zones: f.mini.blockZones || 1 };
   }
-  // a short warning in the track strip, then the defense begins
+  // a short warning in the track strip, then the minigame begins
   function telegraph(txt, then, col = C_BLUE) {
     const p = add([text(txt, { size: 12 }), pos(W / 2, 163), anchor("center"), color(...col), z(30)]);
     wait(0.4, () => { destroy(p); then(); });
   }
-  // the enemy's turn minigame: the rolled damage goes in; what lands comes out, never below 30% of the roll
-  let defending = false;
-  function defenseFx(on) {
+  function defenseFx(f, on) {
     destroyAll("defensefx");
-    defending = on;
-    if (!on) { bossSpr.pos.x = W / 2; return; }
+    defending = on ? f : null;
+    if (!on) { f.spr.pos.x = f.x; return; }
     // a blue glow behind the enemy and a bouncing "!" over its head, for the whole enemy turn
-    const glow = add([circle(46), pos(W / 2, BY), color(...C_BLUE), opacity(0.22), z(4), "defensefx"]);
+    const glow = add([circle(46), pos(f.x, BY), color(...C_BLUE), opacity(0.22), z(4), "defensefx"]);
     glow.onUpdate(() => { glow.opacity = 0.14 + 0.14 * Math.abs(Math.sin(time() * 9)); });
-    const bang = add([text("!", { size: 26 }), pos(W / 2 + 34, BY - 44), anchor("center"), color(...C_BLUE), z(31), "defensefx"]);
+    const bang = add([text("!", { size: 26 }), pos(f.x + 34, BY - 44), anchor("center"), color(...C_BLUE), z(31), "defensefx"]);
     bang.onUpdate(() => { bang.pos.y = BY - 44 - Math.abs(Math.sin(time() * 10)) * 8; });
   }
-  function defend(rolled, done) {
-    const d = pickDefense(); defTurn += 1;
-    const speed = mini.speed || 1;
-    defenseFx(true);
+  // the target's defense minigame: the rolled damage goes in; what lands comes out, never below 30% of the roll
+  function defend(f, rolled, done) {
+    const d = pickDefense(f); f.defTurn += 1;
+    const speed = f.mini.speed || 1;
+    defenseFx(f, true);
     const land = (cut) => {
-      defenseFx(false);
+      defenseFx(f, false);
       let final = rolled;
       if (cut < 0) final = Math.round(rolled * (1 - cut));
       else if (cut > 0) final = Math.max(Math.ceil(rolled * 0.3), Math.round(rolled * (1 - cut)));
       done(Math.max(1, final));
     };
     if (d.defend === "mashB") {
-      telegraph(d.flurry ? "A FLURRY!!" : `${boss.name} ATTACKS!`, () =>
+      telegraph(d.flurry ? "A FLURRY!!" : `${f.name} ATTACKS!`, () =>
         miniCue("mash", C_BLUE, () => miniMash({ prompt: d.flurry ? "FLURRY! MASH A!" : "BLOCK! MASH A!", keys: INTERACT.concat(BACK), duration: 1.5, speed, hot: C_BLUE, flurry: d.flurry }, (r) => land(0.6 * r))));
     } else if (d.defend === "wait") {
-      telegraph(`${boss.name} ATTACKS!`, () =>
-        miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: bossSpr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
+      telegraph(`${f.name} ATTACKS!`, () =>
+        miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: f.spr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
     } else {
-      telegraph(`${boss.name} ATTACKS!`, () =>
-        miniCue("timing", C_BLUE, () => miniTiming({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
+      telegraph(`${f.name} ATTACKS!`, () =>
+        miniCue("timing", C_BLUE, () => miniTiming({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: f.mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
     }
   }
 
-  function enemyTurn() {
-    if (boss.frozen > 0) { boss.frozen -= 1; say([`* ${boss.name} is frozen and can't move!`], () => busy = false); return; }
-    const ph = currentPhase();
-    const dbl = ph && ph.double != null ? ph.double : mini.double;
+  function enemiesTurn() {
+    busy = true;
+    const live = foes.filter((f) => f.alive);
+    let k = 0;
+    const nextFoe = () => { if (k >= live.length) { startRound(); return; } foeTurn(live[k++], nextFoe); };
+    nextFoe();
+  }
+  function foeTurn(f, cb) {
+    if (f.frozen > 0) { f.frozen -= 1; say([`* ${f.name} is frozen and can't move!`], cb); return; }
+    const ph = currentPhase(f);
+    const dbl = ph && ph.double != null ? ph.double : f.mini.double;
     const swings = dbl && Math.random() < dbl ? 2 : 1;
     const lines = [];
     function next(i) {
-      if (i >= swings) { say(lines, () => busy = false); return; }
-      const a = choose(def.attacks);
-      const rolled = a.d[1] === 0 ? 0 : randi(a.d[0], a.d[1]);
-      const head = `* ${boss.name} ${a.t.replace("%n", state.name)}`;
+      if (i >= swings) { say(lines, cb); return; }
+      const a = choose(f.def.attacks);
+      const target = choose(members.filter(alive));
+      const rolled = a.d[1] === 0 ? 0 : Math.round(randi(a.d[0], a.d[1]) * dmgScale());
+      window.rbBattle.lastRoll = rolled; window.rbBattle.lastTarget = target.name;
+      const head = `* ${f.name} ${a.t.replace("%n", target.label)}`;
       if (rolled === 0) { lines.push(head + " Nothing happened."); next(i + 1); return; }
-      defend(rolled, (dmg) => {
-        state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); music.sfx("hurt");
-        add([text(`-${dmg}`, { size: 14 }), pos(65, PY - 6), anchor("center"), color(...C_RED), z(45), opacity(1), lifespan(0.8, { fade: 0.3 }), move(UP, 30)]);
+      targeting = target;
+      defend(f, rolled, (dmg) => {
+        targeting = null;
+        setHp(target, mhp(target) - dmg); shake(dmg > 6 ? 14 : 8); music.sfx("hurt");
+        add([text(`-${dmg}`, { size: 14 }), pos(target.cx, PY - 6), anchor("center"), color(...C_RED), z(45), opacity(1), lifespan(0.8, { fade: 0.3 }), move(UP, 30)]);
         const note = dmg < rolled ? ` (You blocked ${rolled - dmg}!)` : dmg > rolled ? ` (You flinched! +${dmg - rolled})` : "";
-        lines.push(`${head} ${dmg} damage to ${state.name}!${note}`);
-        if (state.hp <= 0) {
-          music.sfx("lose");
-          say(lines.concat([`* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."]),
-            () => {
-              state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1);
-              if (inHollow) go("hollow", { resume: true, lost: true, boss: !def.small });
-              else go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true });
-            });
-          return;
-        }
+        lines.push(`${head} ${dmg} damage to ${target.label}!${note}`);
+        if (!alive(target) && members.length > 1) lines.push(`* ${target.label} went down!`);
+        if (!members.some(alive)) { lose(lines); return; }
         next(i + 1);
       });
     }
@@ -2209,67 +2838,30 @@ scene("battle", (which) => {
       wait(0.7, () => { destroy(p); next(0); });
     } else next(0);
   }
+  function lose(lines) {
+    music.sfx("lose");
+    const solo = members.length === 1;
+    say(lines.concat([solo ? `* ${state.name} got knocked flat.` : "* Everybody is down.", "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."]), () => {
+      fullHeal(); state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1);
+      if (zone === "hollow") go("hollow", { resume: true, lost: true, boss: !lead.small });
+      else if (zone === "house2") go("house2", { retry: true });
+      else if (zone === "road") go("road", { resume: true, at: bopts.at, lost: true });
+      else go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true });
+    });
+  }
 
-  wait(0.2, () => say(def.intro, () => busy = false));
+  if (lead.small && (zone === "cave" || zone === "hollow") && which !== "ambush") add([text(inHollow ? `hollow ${state.hollow + 1} / ${HOLLOW_ORDER.length}` : `cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
+  wait(0.2, () => say(lead.intro, startRound));
 });
 
 // ---------------------------------------------------------------- scene: end
 
-// After Lygon: the family is home, then the orb finds you and the story goes on east.
+// The reunion after Lygon plays at home now (see reunionScene). This screen is the true ending only.
 scene("end", () => {
   resetCam();
-  if (state.beatLygon && !state.beatMalva) return interlude();
+  if (!state.beatMalva) { wait(0, () => go((state.party || []).includes("sis") && !state.homeAgain ? "downstairs" : "town")); return; }
   trueEnd();
 });
-
-function interlude() {
-  music.play("finis");
-  state.hp = state.maxHp; state.pp = state.maxPp;
-  save("town"); // a refresh from here lands at home with the road east open
-  add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
-  add([rect(W, 100), pos(0, 120), color(60, 46, 40)]);
-  for (let y = 132; y < 220; y += 12) add([rect(W, 1), pos(0, y), color(48, 36, 32)]);
-  const win = { x: W / 2 - 15, y: 40, w: 30, h: 22 };
-  drawWindow(win);
-  const stars = [];
-  for (let i = 0; i < 20; i++) stars.push(add([rect(1, 1), pos(win.x + rand(2, win.w - 2), win.y + rand(2, win.h - 2)), color(232, 232, 240), opacity(rand(0.4, 1)), z(3)]));
-  // everyone, close together
-  add([sprite("mom"), pos(W / 2 - 62, 108), anchor("topleft"), z(5)]);
-  add([sprite("dad"), pos(W / 2 + 44, 104), anchor("topleft"), z(5)]);
-  add([sprite(heroSprite()), pos(W / 2 - 12, 100), anchor("topleft"), z(6)]);
-  add([sprite("sis"), pos(W / 2 - 30, 112), anchor("topleft"), z(7)]);
-  add([sprite("bro"), pos(W / 2 + 14, 114), anchor("topleft"), z(7)]);
-  add([sprite("dog"), pos(W / 2 - 88, 136), anchor("topleft"), z(6)]);
-  const title = add([text("YOU SAVED THEM!", { size: 20 }), pos(W / 2, 20), anchor("center"), color(242, 208, 92), z(5)]);
-  const hintT = add([text("press SPACE to go", { size: 8 }), pos(W / 2, 226), anchor("center"), color(242, 208, 92), z(5)]);
-  hintT.hidden = true;
-  hintT.onUpdate(() => { if (!hintT.hidden) hintT.opacity = 0.5 + 0.5 * Math.abs(Math.sin(time() * 3)); });
-  let ready = false;
-  wait(0.8, () => say([
-    `${state.sis}: ${state.name}!! You came! I KNEW you'd come. I wasn't scared.`,
-    `${state.bro}: I was a little scared.`,
-    "Mom: Oh, my babies. ALL of my babies. Come here.",
-    `* Everyone hugged. Even Dad. Even ${state.dog}, sort of.`,
-    "Dad: That's my kids. That's all three of my kids.",
-    "* That night, everyone slept in the same room. Nobody argued about it.",
-  ], () => {
-    music.play("danger");
-    title.text = "...";
-    stormFlashes([win]);
-    stars.forEach((st) => st.hidden = true);
-    wait(1.4, () => say([
-      "* The window flashed PURPLE.",
-      "* Not thunder. Not the clown. Something farther away. Something WATCHING.",
-      `A VOICE: I see you, ${state.name}.`,
-      "A VOICE: I have always seen you. Through the orb. Every step. The clown was only the first thing I sent.",
-      `${state.sis}: ${state.name}... who was THAT?`,
-      `* ${state.name} put a hand on the sword.`,
-      "* GOAL: Find her. Break the orb.",
-      "* The road runs EAST from town. Whatever she is, she's that way.",
-    ], () => { ready = true; hintT.hidden = false; }));
-  }));
-  INTERACT.forEach((k) => onKeyPress(k, () => { if (ready && !dialogOpen) { music.sfx("select"); go("town"); } }));
-}
 
 // After Malagore: everyone, the orb in pieces, the end.
 function trueEnd() {
@@ -2294,6 +2886,7 @@ function trueEnd() {
   add([sprite("sis"), pos(W / 2 - 30, 64), anchor("center"), z(5)]);
   add([sprite("bro"), pos(W / 2 + 30, 64), anchor("center"), z(5)]);
   add([sprite("dog"), pos(W / 2 - 50, 80), anchor("center"), z(6)]);
+  if (state.friends) ["pip", "zed", "bruno", "bloop"].forEach((n, i) => { if (n !== "bloop" || (state.party || []).includes("bloop")) add([sprite(n), pos(W / 2 - 120 + (i < 2 ? i * 24 : 200 + (i - 2) * 24), 70), anchor("center"), z(5)]); });
   add([text("YOU SAVED EVERYONE!", { size: 20 }), pos(W / 2, 104), anchor("center"), color(242, 208, 92), z(5)]);
   add([text(`${state.name} broke the orb. Nobody is watching anymore.`, { size: 8 }), pos(W / 2, 126), anchor("center"), color(232, 232, 240), z(5)]);
   add([text(`${state.sis}: "I wasn't scared. Either time."\n${state.bro}: "I was a little scared. Both times."`, { size: 8, align: "center", lineSpacing: 3 }), pos(W / 2, 150), anchor("center"), color(207, 207, 216), z(5)]);
