@@ -142,9 +142,10 @@ function wireMenu() {
 
 // ---------------------------------------------------------------- overworld helpers
 
+function heroSprite() { return state.giantSword ? "hero_giant" : state.hasSword ? "hero_sword" : "hero"; }
 function makePlayer(x, y) {
   const p = add([
-    sprite(state.hasSword ? "hero_sword" : "hero"), pos(x, y),
+    sprite(heroSprite()), pos(x, y),
     area({ shape: new Rect(vec2(6, 22), 10, 9) }), body(), anchor("topleft"), z(10), "player",
   ]);
   const SPEED = 85;
@@ -835,7 +836,7 @@ scene("sideroom", (opts = {}) => {
       sp.onUpdate(() => { sp.hidden = Math.floor(time() * 4) % 3 === 0; sp.pos.x = cx + Math.sin(time() * 5) * 10; });
       pr.talk = () => {
         say(["* A present. Down here. With a bow on it.", "* You tear off the paper.", "* ..."], () => {
-          destroy(pr); destroy(sp); state.giantSword = true; music.sfx("pickup"); save("cave");
+          destroy(pr); destroy(sp); state.giantSword = true; music.sfx("pickup"); save("cave"); player.use(sprite("hero_giant"));
           const sw = add([sprite("sword"), pos(player.pos.x + 11, player.pos.y - 30), anchor("center"), scale(2), z(60)]);
           sw.onUpdate(() => { sw.pos.y -= 6 * dt(); sw.angle = Math.sin(time() * 6) * 5; });
           const flare = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.7), z(55), fixed()]);
@@ -1287,9 +1288,11 @@ scene("battle", (which) => {
   function powerUp(action, done) {
     const kind = attackKind(action), speed = mini.speed || 1;
     const zone = (mini.zone || 0.3) * (action === "ice" ? 0.65 : 1); // ice asks for a steadier hand
+    telegraph(`${state.name} ATTACKS!`, () => {
     if (kind === "mash") miniCue("mash", C_GOLD, () => miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r))));
     else if (kind === "sequence") miniCue("sequence", C_GOLD, () => miniSequence({ speed, zone }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss")));
     else miniCue("timing", C_GOLD, () => miniTiming({ prompt: "TAP A!", speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g)));
+    }, C_GOLD);
   }
 
   function confirm() {
@@ -1378,8 +1381,8 @@ scene("battle", (which) => {
     return { defend: name, fakeouts: mini.fakeouts || 0 };
   }
   // a short warning in the track strip, then the defense begins
-  function telegraph(txt, then) {
-    const p = add([text(txt, { size: 12 }), pos(W / 2, 163), anchor("center"), color(...C_BLUE), z(30)]);
+  function telegraph(txt, then, col = C_BLUE) {
+    const p = add([text(txt, { size: 12 }), pos(W / 2, 163), anchor("center"), color(...col), z(30)]);
     wait(0.4, () => { destroy(p); then(); });
   }
   // the enemy's turn minigame: the rolled damage goes in; what lands comes out, never below 30% of the roll
@@ -1462,7 +1465,7 @@ scene("end", () => {
     const sp = rand(20, 50);
     c.onUpdate(() => { c.pos.y += sp * dt(); c.pos.x += Math.sin(time() * 3 + i) * 0.3; if (c.pos.y > H) c.pos.y = -5; });
   }
-  add([sprite("hero_sword"), pos(W / 2, 60), anchor("center"), z(5)]);
+  add([sprite(heroSprite()), pos(W / 2, 60), anchor("center"), z(5)]);
   add([sprite("sis"), pos(W / 2 - 30, 64), anchor("center"), z(5)]);
   add([sprite("bro"), pos(W / 2 + 30, 64), anchor("center"), z(5)]);
   add([sprite("dog"), pos(W / 2 - 56, 76), anchor("center"), z(5)]);
