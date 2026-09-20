@@ -1815,11 +1815,17 @@ function miniTiming(o, done) {
     miniResult(gradeLabel(res));
     wait(0.45, () => done(res));
   }
+  // Forgiving: a press outside the zone shows an X and the sweep keeps going; two are
+  // tolerated (a kid mashing A gets two chances to land it), the third ends it as a miss.
+  let misses = 0;
   const off = miniKeys(o.keys || INTERACT, () => {
-    if (t < 0) return;
+    if (t < 0 || over) return;
     const f = t / dur, d = Math.min(...zones.map((c) => Math.abs(f - c)));
-    music.sfx("select");
-    finish(d <= pw / 2 ? "perfect" : d <= gw / 2 ? "good" : "miss");
+    if (d <= pw / 2) { music.sfx("select"); finish("perfect"); return; }
+    if (d <= gw / 2) { music.sfx("select"); finish("good"); return; }
+    misses += 1; music.sfx("back");
+    add([text("X", { size: 14 }), pos(marker.pos.x + 2, TRACK.y - 12), anchor("center"), color(...C_RED), z(31), opacity(1), lifespan(0.6, { fade: 0.3 }), move(UP, 20), MINI]);
+    if (misses >= 3) finish("miss");
   });
   const timer = wait(ARM + dur + 0.12, () => finish("miss"));
 }
