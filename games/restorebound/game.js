@@ -73,6 +73,7 @@ function say(lines, onDone) {
       return;
     }
     full = lines[i]; shown = 0; typing = true;
+    music.sfx("talk");
   }
 }
 
@@ -160,7 +161,7 @@ function stormFlashes(windows) {
 
 scene("title", (opts = {}) => {
   resetCam();
-  music.play("home");
+  music.play("title");
   const saved = opts.fresh ? null : loadSave();
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
   for (let i = 0; i < 40; i++) {
@@ -189,8 +190,9 @@ scene("title", (opts = {}) => {
     const cur = add([text(">", { size: 10 }), pos(0, 140), anchor("center"), color(242, 208, 92), z(6)]);
     cur.onUpdate(() => { cur.pos.x = opts2[pick].pos.x - opts2[pick].width / 2 - 8; opts2.forEach((o, i) => o.color = i === pick ? rgb(242, 208, 92) : rgb(232, 232, 240)); });
     add([text("left / right, then SPACE", { size: 8 }), pos(W / 2, 168), anchor("center"), color(138, 138, 153), z(5)]);
-    ["left", "a", "4", "right", "d", "6"].forEach((k) => onKeyPress(k, () => { pick = 1 - pick; }));
+    ["left", "a", "4", "right", "d", "6"].forEach((k) => onKeyPress(k, () => { pick = 1 - pick; music.sfx("move"); }));
     INTERACT.forEach((k) => onKeyPress(k, () => {
+      music.sfx("select");
       if (pick === 0) { Object.assign(state, saved.state); go(saved.scene); }
       else { clearSave(); Object.assign(state, START); go("title", { fresh: true }); }
     }));
@@ -238,7 +240,7 @@ scene("title", (opts = {}) => {
 scene("upstairs", () => {
   resetCam();
   save("upstairs");
-  music.play("home");
+  music.play(state.kidnapped ? "danger" : "night");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   wall(0, 0, W, 40, [140, 170, 200]);
@@ -349,7 +351,7 @@ scene("upstairs", () => {
         const boom = add([text("BOOOOM!!", { size: 28 }), pos(W / 2, 100), anchor("center"), color(242, 208, 92), z(200), opacity(1)]);
         boom.onUpdate(() => { boom.pos.y -= 20 * dt(); boom.opacity = Math.max(0, boom.opacity - 0.6 * dt()); });
         wait(0.5, () => { state.boomed = true; stormFlashes(windows); });
-        wait(1.3, () => { shake(16); const bang = add([text("BANG!", { size: 22 }), pos(W / 2 + 60, 80), anchor("center"), color(199, 123, 214), z(200), opacity(1), lifespan(1, { fade: 0.6 })]); });
+        wait(1.3, () => { shake(16); music.sfx("bang"); const bang = add([text("BANG!", { size: 22 }), pos(W / 2 + 60, 80), anchor("center"), color(199, 123, 214), z(200), opacity(1), lifespan(1, { fade: 0.6 })]); });
         wait(2.0, () => {
           destroy(boom);
           say([
@@ -364,6 +366,7 @@ scene("upstairs", () => {
 
   // LYGON breaks in
   function breakIn() {
+    music.play("danger");
     wait(0.8, () => {
       shake(30); music.sfx("boom");
       const crash = add([text("KRRAAASH!!", { size: 22 }), pos(W / 2, 100), anchor("center"), color(242, 208, 92), z(200), opacity(1)]);
@@ -372,7 +375,7 @@ scene("upstairs", () => {
         destroy(crash);
         say(["* Something just came through the front door.", "* Something is coming UP THE STAIRS.", "* Big, slow, heavy footsteps. And laughing."], () => {
           const clown = add([sprite("lygon"), pos(W / 2 - 64, 120), anchor("topleft"), z(30)]);
-          shake(14); music.play("battle");
+          shake(14);
           const wash = add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0.35), z(25), fixed()]);
           wash.onUpdate(() => { wash.opacity = Math.max(0, wash.opacity - 0.5 * dt()); });
           say([
@@ -386,7 +389,7 @@ scene("upstairs", () => {
             const poof = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.9), z(90), fixed()]);
             poof.onUpdate(() => { poof.opacity = Math.max(0, poof.opacity - 1.5 * dt()); });
             destroy(clown); if (sis) destroy(sis); if (bro) destroy(bro);
-            state.kidnapped = true; music.play("home");
+            state.kidnapped = true; music.sfx("kidnap"); music.play("danger");
             wait(0.6, () => say([
               "* ...They're gone.",
               `* ${state.sis} and ${state.bro} are gone.`,
@@ -430,7 +433,7 @@ const DAD_LINES = () => [
 scene("downstairs", () => {
   resetCam();
   save("downstairs");
-  music.play("home");
+  music.play(state.kidnapped ? "danger" : "night");
   add([rect(W, H), pos(0, 0), color(210, 180, 140)]);
   for (let y = 40; y < H; y += 12) add([rect(W, 1), pos(0, y), color(190, 160, 120)]);
   wall(0, 0, W, 40, [150, 190, 220]);
@@ -503,7 +506,7 @@ scene("downstairs", () => {
     if (!state.talkedMom || !state.talkedDad) { say(["* Mom and Dad are calling your name."]); player.pos.y -= 8; return; }
     if (!state.hasKey) { say(["* Locked. LYGON's purple seal hums on the handle.", `* Dad said the spare key is behind ${state.bro}'s bed.`]); player.pos.y -= 8; return; }
     music.sfx("unlock");
-    say(["* The spare key turns. The purple seal pops like a soap bubble.", `* ${state.name} stepped out into the flashing night.`], () => go("town"));
+    say(["* The spare key turns. The purple seal pops like a soap bubble.", `* ${state.name} stepped out into the flashing night.`], () => { music.sfx("door"); go("town"); });
   });
 
   wait(0.3, () => say(["* The living room looks like a tornado came through.", "* The front door is glowing purple. Mom and Dad are both talking at once."]));
@@ -513,7 +516,7 @@ scene("downstairs", () => {
 
 scene("town", () => {
   resetCam();
-  music.play("home");
+  music.play("outside");
   save("town");
   add([rect(W, H), pos(0, 0), color(94, 170, 100)]);
   for (let i = 0; i < 120; i++) add([rect(1, 2), pos(rand(0, W), rand(0, H)), color(70, 140, 80)]);
@@ -766,8 +769,9 @@ const PSI = [
 
 scene("battle", (which) => {
   resetCam();
-  music.play("battle");
   const def = ENEMIES[which];
+  music.sfx("battle_start");
+  music.play(def.small ? "battle" : "boss");
   const boss = { name: def.name, hp: def.hp, maxHp: def.hp, frozen: 0 };
   let busy = true;
   let menu = 0, sub = null, subIdx = 0;
@@ -834,21 +838,23 @@ scene("battle", (which) => {
     if (dx === 1 && idx % 2 === 0 && idx + 1 < L.length) idx += 1;
     if (dy === -1 && idx >= 2) idx -= 2;
     if (dy === 1 && idx + 2 < L.length) idx += 2;
+    if (idx !== (sub ? subIdx : menu)) music.sfx("move");
     if (sub) subIdx = idx; else menu = idx;
   }
   ["left", "a", "4"].forEach((k) => onKeyPress(k, () => nav(-1, 0)));
   ["right", "d", "6"].forEach((k) => onKeyPress(k, () => nav(1, 0)));
   ["up", "w", "8"].forEach((k) => onKeyPress(k, () => nav(0, -1)));
   ["down", "s", "2"].forEach((k) => onKeyPress(k, () => nav(0, 1)));
-  BACK.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen && sub) { sub = null; subIdx = 0; } }));
+  BACK.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen && sub) { sub = null; subIdx = 0; music.sfx("back"); } }));
   INTERACT.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen) confirm(); }));
 
   function confirm() {
     if (sub === "psi") {
-      if (subIdx === 3) { sub = null; subIdx = 0; return; }
+      if (subIdx === 3) { sub = null; subIdx = 0; music.sfx("back"); return; }
       const p = PSI[subIdx];
-      if (state.pp < p.pp) { say([`* Not enough PP for ${p.name}. (needs ${p.pp})`]); return; }
+      if (state.pp < p.pp) { music.sfx("back"); say([`* Not enough PP for ${p.name}. (needs ${p.pp})`]); return; }
       sub = null; subIdx = 0; busy = true;
+      music.sfx("psi_" + p.kind);
       state.pp -= p.pp;
       let dmg = randi(p.dmg[0], p.dmg[1]);
       const weak = p.kind === def.weak;
@@ -863,21 +869,25 @@ scene("battle", (which) => {
       return;
     }
     if (sub === "item") {
-      if (subIdx === 2) { sub = null; subIdx = 0; return; }
+      if (subIdx === 2) { sub = null; subIdx = 0; music.sfx("back"); return; }
       if (subIdx === 0) {
-        if (state.cookies <= 0) { say(["* No cookies left!"]); return; }
+        if (state.cookies <= 0) { music.sfx("back"); say(["* No cookies left!"]); return; }
+        music.sfx("heal");
         state.cookies -= 1; const heal = Math.min(state.maxHp - state.hp, 15); state.hp += heal;
         sub = null; busy = true; say([`* ${state.name} ate a Cookie. +${heal} HP!`], enemyTurn); return;
       }
-      if (state.juice <= 0) { say(["* No juice left!"]); return; }
+      if (state.juice <= 0) { music.sfx("back"); say(["* No juice left!"]); return; }
+      music.sfx("heal");
       state.juice -= 1; const heal = state.maxHp - state.hp; state.hp = state.maxHp;
       sub = null; busy = true; say([`* ${state.name} drank the Juice Box. +${heal} HP! Full health!`], enemyTurn); return;
     }
     const o = OPTIONS[menu];
+    music.sfx("select");
     if (o === "PSI") { sub = "psi"; subIdx = 0; return; }
     if (o === "Item") { sub = "item"; subIdx = 0; return; }
     busy = true;
     if (o === "Slash") {
+      music.sfx("slash");
       const crit = Math.random() < 0.2;
       const dmg = randi(8, 12) * (crit ? 2 : 1);
       const slash = add([rect(40, 3), pos(W / 2, 88), anchor("center"), color(244, 241, 234), rotate(-40), z(40), lifespan(0.15)]);
@@ -902,7 +912,7 @@ scene("battle", (which) => {
     wait(0.08, () => bossSpr.pos.x = W / 2);
     add([text(`${dmg}`, { size: 14 }), pos(W / 2 + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), lifespan(0.8), move(UP, 30)]);
     const lines = [`* ${state.name} ${verb} ${dmg} damage to ${boss.name}!`];
-    if (boss.hp <= 0) say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (state.cave % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next);
+    if (boss.hp <= 0) { music.sfx("win"); say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (state.cave % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next); }
     else say(lines, enemyTurn);
   }
 
@@ -911,8 +921,9 @@ scene("battle", (which) => {
     const a = choose(def.attacks);
     const dmg = a.d[1] === 0 ? 0 : randi(a.d[0], a.d[1]);
     const line = `* ${boss.name} ${a.t.replace("%n", state.name)}` + (dmg > 0 ? ` ${dmg} damage to ${state.name}!` : " Nothing happened.");
-    if (dmg > 0) { state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); }
+    if (dmg > 0) { state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); music.sfx("hurt"); }
     if (state.hp <= 0) {
+      music.sfx("lose");
       say([line, `* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."],
         () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", { resume: true, lost: true }); });
     } else say([line], () => busy = false);
@@ -925,7 +936,7 @@ scene("battle", (which) => {
 
 scene("end", () => {
   resetCam();
-  music.play("victory");
+  music.play("finis");
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
   for (let i = 0; i < 60; i++) {
     const c = add([rect(2, 3), pos(rand(0, W), rand(-H, 0)), color(...choose([[224, 69, 63], [242, 208, 92], [58, 111, 216], [79, 176, 106], [199, 123, 214]])), z(1)]);
