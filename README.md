@@ -17,8 +17,14 @@ his way out. Find the spare key behind your brother's bed, talk to Mom and
 Dad, and go up the hill into the cave: six of Lygon's critters, then **Bugon**
 at the inner door, then Lygon himself.
 
-Lygon was only sent. After the rescue the windows flash purple again: someone
-is watching through an **orb**. Follow the road east to a second town and the
+Lygon was only sent. Your brother and sister follow you home; that night the
+windows flash purple again: someone is watching through an **orb**. In the
+morning there is shouting next door — the **King** has raised the mailman and
+the baker against a neighbour. Fight both at once; your friends **Pip**, **Zed**
+and **Bruno** barge in mid-battle and join the party (each with their own moves:
+Potion and Fizz Bomb, Zip Gun and Bottle Rockets, Punch, Kick and Focus). The
+King shoves you down and runs east. Follow the road — where strays roam and
+**Mr. Bloop** (who can only kick) joins — to a second town and the
 **Hollow**, a dungeon of black-purple stone where six of the townsfolk —
 turned by the sorceress **Malva** — guard the way: three swoopers in the air on
 the sides, three stompers on the floor, fought ground and air by turns. Beat
@@ -26,7 +32,7 @@ them all and the seal opens on Malva, sitting under the orb.
 
 - Name your hero, your brother, your sister, and your dog
 - Arrows, numpad (8/4/6/2) or WASD to move; `Space` is the main button; `/` is back; `M` mutes
-- Battles: **Slash**, **PSI** (Fire, Ice, Starstorm), **Items** (Cookie, Juice)
+- Battles: **Slash**, **PSI** (Fire, Ice, Starstorm), **Items** (Cookie, Juice); party members each act in turn, enemies pick a random member to hit, and the party only loses when everyone is down
 - Progress saves automatically in the browser; **Restart from beginning** wipes it
 - Music is synthesized live with the Web Audio API — funky chiptune, no audio files
 - The hero, the family, and all eight enemies are pixel versions of crayon drawings
