@@ -20,9 +20,9 @@ at the inner door, then Lygon himself.
 Lygon was only sent. After the rescue the windows flash purple again: someone
 is watching through an **orb**. Follow the road east to a second town and the
 **Hollow**, a dungeon of black-purple stone where six of the townsfolk —
-turned by the sorceress **Malva** — guard the way: three swoopers in the air on
+turned by the sorceress **Malagore** — guard the way: three swoopers in the air on
 the sides, three stompers on the floor, fought ground and air by turns. Beat
-them all and the seal opens on Malva, sitting under the orb.
+them all and the seal opens on Malagore, sitting under the orb.
 
 - Name your hero, your brother, your sister, and your dog
 - Arrows, numpad (8/4/6/2) or WASD to move; `Space` is the main button; `/` is back; `M` mutes

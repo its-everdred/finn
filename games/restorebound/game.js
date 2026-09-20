@@ -1033,10 +1033,10 @@ scene("town2", (opts) => {
 });
 
 // ---------------------------------------------------------------- scene: the Hollow
-// MALVA's dungeon: one tall hall of black-purple stone, chains, and light falling from
+// MALAGORE's dungeon: one tall hall of black-purple stone, chains, and light falling from
 // somewhere above. Six of the east town's people guard it: three on the floor at the bottom,
 // three in the air on the sides. They come at you one at a time, ground and air by turns.
-// Beat all six and the seal at the top opens on MALVA, sitting under the ORB.
+// Beat all six and the seal at the top opens on MALAGORE, sitting under the ORB.
 
 scene("hollow", (opts) => {
   opts = opts || {};
@@ -1154,7 +1154,7 @@ scene("hollow", (opts) => {
       say(["* A wall of purple light. It hums.", `* ${left} of hers still stand between you and whatever is on the other side.`]);
     });
   } else if (!state.beatMalva) {
-    // MALVA, on her chair, under the ORB
+    // MALAGORE, on her chair, under the ORB
     const spot = add([rect(90, 70), pos(BOSS.x - 45, BOSS.y - 60), color(199, 123, 214), opacity(0.14), z(1)]);
     spot.onUpdate(() => { spot.opacity = 0.1 + 0.1 * Math.abs(Math.sin(time() * 2.2)); });
     add([rect(44, 30), pos(BOSS.x - 22, BOSS.y - 6), color(28, 18, 44), z(3)]); add([rect(48, 6), pos(BOSS.x - 24, BOSS.y + 22), color(22, 14, 36), z(3)]);
@@ -1275,7 +1275,7 @@ const ENEMIES = {
     },
   },
 
-  // -------- the Hollow. Every one of these is a person from the east town that MALVA turned.
+  // -------- the Hollow. Every one of these is a person from the east town that MALAGORE turned.
   // `zone: "hollow"` routes wins and losses back to the Hollow instead of the cave.
   clonk: {
     name: "CLONK", spr: "stomper1", hp: 30, weak: "ice", bg: [26, 14, 40], band: [46, 26, 66], zone: "hollow",
@@ -1326,9 +1326,9 @@ const ENEMIES = {
     mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], fakeouts: 3, speed: 1.5, zone: 0.25 },
   },
   malva: {
-    name: "MALVA", spr: "malva", hp: 140, weak: "fire", bg: [16, 4, 30], band: [40, 12, 66], zone: "hollow", scale: 1.6,
-    meet: ["* A tall figure in a black cloak sits on a stone chair. Above her, an ORB hangs in the air, glowing purple.", "* Inside the orb: your house. Your street. Your MOM, looking out the window.", "MALVA: Finally. Come closer. I like to see faces.", "* You drew the sword."],
-    intro: ["MALVA: I have watched you since the storm, little one. Through the orb. Every step.", "MALVA: The clown was a toy. The townsfolk were toys. YOU are the one I wanted.", "* MALVA rose from her chair! The orb burned brighter!"],
+    name: "MALAGORE", spr: "malva", hp: 140, weak: "fire", bg: [16, 4, 30], band: [40, 12, 66], zone: "hollow", scale: 1.6,
+    meet: ["* A tall figure in a black cloak sits on a stone chair. Above her, an ORB hangs in the air, glowing purple.", "* Inside the orb: your house. Your street. Your MOM, looking out the window.", "MALAGORE: Finally. Come closer. I like to see faces.", "* You drew the sword."],
+    intro: ["MALAGORE: I have watched you since the storm, little one. Through the orb. Every step.", "MALAGORE: The clown was a toy. The townsfolk were toys. YOU are the one I wanted.", "* MALAGORE rose from her chair! The orb burned brighter!"],
     attacks: [
       { t: "glared at %n through the orb!", d: [5, 9] },
       { t: "flicked a hand. The orb flashed! Dark bolts rained down on %n!", d: [6, 10] },
@@ -1336,11 +1336,11 @@ const ENEMIES = {
       { t: "laughed. The orb showed %n falling.", d: [3, 6] },
     ],
     win: [
-      "MALVA: No... NO. I SAW this. I saw you FALL...",
+      "MALAGORE: No... NO. I SAW this. I saw you FALL...",
       "* The orb cracked.",
       "* ...and shattered. Light poured out.",
       "* Every purple thing in the Hollow went out at once, like a blown candle.",
-      "* MALVA's cloak folded to the floor, empty.",
+      "* MALAGORE's cloak folded to the floor, empty.",
     ],
     next: () => { state.beatMalva = true; go("end"); },
     mini: {
@@ -1609,7 +1609,7 @@ scene("battle", (which) => {
   });
   const frost = add([rect(90, 84), pos(W / 2, BY), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
   frost.onUpdate(() => { frost.opacity = boss.frozen > 0 ? 0.35 : 0; });
-  // MALVA sits under the ORB: it hangs behind her, spinning slowly, pulsing purple, and burns at low HP
+  // MALAGORE sits under the ORB: it hangs behind her, spinning slowly, pulsing purple, and burns at low HP
   if (which === "malva") {
     const oglow = add([circle(30), pos(W / 2, BY - 56), color(199, 123, 214), opacity(0.25), z(3), "orbglow"]);
     const orb = add([sprite("orb"), pos(W / 2, BY - 56), anchor("center"), scale(1.4), rotate(0), z(4), "orb"]);
@@ -1931,7 +1931,7 @@ function interlude() {
   INTERACT.forEach((k) => onKeyPress(k, () => { if (ready && !dialogOpen) { music.sfx("select"); go("town"); } }));
 }
 
-// After Malva: everyone, the orb in pieces, the end.
+// After Malagore: everyone, the orb in pieces, the end.
 function trueEnd() {
   music.play("finis");
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
