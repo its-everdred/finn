@@ -20,7 +20,7 @@ Object.entries(window.SPRITES).forEach(([k, rows]) => loadSprite(k, window.pixel
 
 const START = {
   hasSword: false, kidnapped: false, boomed: false, hasKey: false, talkedSis: false, talkedBro: false, talkedMom: false, talkedDad: false,
-  cave: 0, beatBugon: false, hp: 40, pp: 30, cookies: 3, juice: 1,
+  cave: 0, beatBugon: false, branchSide: null, branchEnemy: null, branchDone: false, branchSeen: false, giantSword: false, hp: 40, pp: 30, cookies: 3, juice: 1,
 };
 const state = { name: "Finn", sis: "Lily", bro: "Max", dog: "Biscuit", maxHp: 40, maxPp: 30, ...START };
 
@@ -31,6 +31,18 @@ function save(sceneName) {
 }
 function loadSave() {
   try { const raw = localStorage.getItem(SAVE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+// Old saves keep working across updates: fill in any field a newer build added,
+// keep the player's names and progress, and fall back to a scene that still exists.
+const SCENES = ["upstairs", "downstairs", "town", "cave"];
+function migrate(saved) {
+  const st = { ...START, name: state.name, sis: state.sis, bro: state.bro, dog: state.dog, maxHp: state.maxHp, maxPp: state.maxPp, ...(saved.state || {}) };
+  // a save from a build with different progress rules never traps the player: clamp what could
+  st.hp = Math.min(Math.max(1, st.hp | 0), st.maxHp); st.pp = Math.min(Math.max(0, st.pp | 0), st.maxPp);
+  st.cave = Math.min(Math.max(0, st.cave | 0), CAVE_ENEMIES.length);
+  let scene = saved.scene;
+  if (!SCENES.includes(scene)) scene = st.kidnapped ? "town" : "upstairs";
+  return { scene, state: st };
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
 // The page's Restart button calls this.
@@ -86,7 +98,7 @@ function makePlayer(x, y) {
   ]);
   const SPEED = 85;
   p.onUpdate(() => {
-    if (dialogOpen) return;
+    if (dialogOpen || window.__frozen) return;
     let d = vec2(0, 0);
     if (isKeyDown("left") || isKeyDown("a") || isKeyDown("4")) d.x -= 1;
     if (isKeyDown("right") || isKeyDown("d") || isKeyDown("6")) d.x += 1;
@@ -125,7 +137,13 @@ function wireTalk(player) {
   }));
 }
 
-function resetCam() { camPos(W / 2, H / 2); if (window.rbNaming) window.rbNaming(false); }
+// Every scene starts here: camera home, and any dialog/freeze left over from the previous
+// scene is cleared, so a scene change mid-dialog can never leave the player locked.
+function resetCam() {
+  camPos(W / 2, H / 2);
+  dialogOpen = false; window.__frozen = false;
+  if (window.rbNaming) window.rbNaming(false);
+}
 
 // the cave is one tall map; the camera follows the player up it
 const CAVE_H = 1000;
@@ -193,7 +211,7 @@ scene("title", (opts = {}) => {
     ["left", "a", "4", "right", "d", "6"].forEach((k) => onKeyPress(k, () => { pick = 1 - pick; music.sfx("move"); }));
     INTERACT.forEach((k) => onKeyPress(k, () => {
       music.sfx("select");
-      if (pick === 0) { Object.assign(state, saved.state); go(saved.scene); }
+      if (pick === 0) { const m = migrate(saved); Object.assign(state, m.state); go(m.scene); }
       else { clearSave(); Object.assign(state, START); go("title", { fresh: true }); }
     }));
     return;
@@ -587,8 +605,14 @@ scene("town", () => {
 // ---------------------------------------------------------------- scene: cave
 
 scene("cave", (opts = {}) => {
+  resetCam();
   save("cave");
   music.play("cave");
+  window.__frozen = false;
+  // roll the fork once per run
+  if (!state.branchSide) { state.branchSide = choose(["left", "right"]); state.branchEnemy = choose(CAVE_ENEMIES); save("cave"); }
+  const BRANCH = 3; // the fork leaves the main tunnel at this segment (after two fights)
+
   // rock
   add([rect(W, CAVE_H), pos(0, 0), color(38, 32, 54)]);
   for (let i = 0; i < 260; i++) add([rect(rand(2, 5), rand(2, 4)), pos(rand(0, W), rand(0, CAVE_H)), color(52, 44, 72)]);
@@ -598,18 +622,37 @@ scene("cave", (opts = {}) => {
     const off = Math.sin(y / 100) * 60;
     segs.push({ x: W / 2 - 22 + off, y: y - 100, w: 44, h: 100 });
   }
+  const FLOOR = [96, 84, 112];
   segs.forEach((sg, i) => {
-    add([rect(sg.w, sg.h), pos(sg.x, sg.y), color(96, 84, 112), z(1)]);
-    if (segs[i + 1]) { // connector so the path stays walkable across the bend
+    add([rect(sg.w, sg.h), pos(sg.x, sg.y), color(...FLOOR), z(1)]);
+    if (segs[i + 1]) {
       const a = Math.min(sg.x, segs[i + 1].x), b = Math.max(sg.x, segs[i + 1].x) + 44;
-      add([rect(b - a, 30), pos(a, sg.y - 15), color(96, 84, 112), z(1)]);
+      add([rect(b - a, 30), pos(a, sg.y - 15), color(...FLOOR), z(1)]);
     }
   });
-  // walls: everything not path. Cheap version: two rock walls that follow each segment.
+  // the fork: two corridors and two rooms off the branch segment
+  const bs = segs[BRANCH];
+  const corrY = bs.y + 38, corrH = 26;
+  // two corridors run off the screen; where they go is only visible once you walk there
+  add([rect(bs.x, corrH), pos(0, corrY), color(...FLOOR), z(1)]);
+  add([rect(W - (bs.x + 44), corrH), pos(bs.x + 44, corrY), color(...FLOOR), z(1)]);
+  add([rect(6, corrH), pos(0, corrY), area(), "sideL"]);
+  add([rect(6, corrH), pos(W - 6, corrY), area(), "sideR"]);
+
+  // walls: rock on both sides of every segment, connector band, and around the fork
   segs.forEach((sg, i) => {
     const nx = segs[i + 1] ? segs[i + 1].x : sg.x;
-    wall(0, sg.y + 15, Math.min(sg.x, nx) - 2, sg.h - 30);
-    wall(Math.max(sg.x, nx) + 46, sg.y + 15, W - (Math.max(sg.x, nx) + 46), sg.h - 30);
+    const L = Math.min(sg.x, nx) - 2, R = Math.max(sg.x, nx) + 46;
+    if (i === BRANCH) {
+      // rock above and below both corridors, built from the fork segment's own edges
+      const bl = sg.x - 2, br = sg.x + 46;
+      wall(0, sg.y + 15, bl, corrY - (sg.y + 15)); wall(0, corrY + corrH, bl, sg.y + 85 - (corrY + corrH));
+      wall(br, sg.y + 15, W - br, corrY - (sg.y + 15)); wall(br, corrY + corrH, W - br, sg.y + 85 - (corrY + corrH));
+    } else {
+      wall(0, sg.y + 15, L, sg.h - 30);
+      wall(R, sg.y + 15, W - R, sg.h - 30);
+    }
+    if (segs[i + 1]) { wall(0, sg.y - 15, Math.min(sg.x, nx), 30); wall(Math.max(sg.x, nx) + 44, sg.y - 15, W - (Math.max(sg.x, nx) + 44), 30); }
   });
   wall(0, CAVE_H - 4, W, 4); wall(0, 0, W, 4);
   // torches
@@ -621,24 +664,24 @@ scene("cave", (opts = {}) => {
   });
 
   const start = segs[0];
-  // Coming back from a fight: resume just past where that fight was, not at the mouth.
   let sx = start.x + 11, sy = CAVE_H - 60;
   if (opts.resume) {
-    const idx = state.beatBugon ? 8 : Math.min(state.cave, CAVE_ENEMIES.length);
-    const sg = segs[idx] || start;
-    sx = sg.x + 11;
-    sy = opts.lost ? Math.min(CAVE_H - 60, sg.y + 96) : sg.y + 18;
+    if (opts.at === "branch") { sx = bs.x + 11; sy = corrY - 20; state.branchSeen = true; }
+    else {
+      const c = Math.min(state.cave, CAVE_ENEMIES.length);
+      const idx = state.beatBugon ? 8 : (c >= 3 ? c + 1 : c);
+      const sg = segs[idx] || start;
+      sx = sg.x + 11;
+      sy = opts.lost ? Math.min(CAVE_H - 60, sg.y + 96) : sg.y + 18;
+    }
   }
   const player = makePlayer(sx, sy);
-  player.onUpdate(() => {
-    const y = Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16));
-    camPos(W / 2, y);
-  });
+  player.onUpdate(() => { camPos(W / 2, Math.max(H / 2, Math.min(CAVE_H - H / 2, player.pos.y + 16))); });
 
   // encounters, one per bend, in order
   CAVE_ENEMIES.forEach((name, i) => {
     if (i < state.cave) return;
-    const sg = segs[i + 1];
+    const sg = segs[i >= 2 ? i + 2 : i + 1];
     const e = add([sprite(name), pos(sg.x + 22, sg.y + 50), anchor("center"), z(5), area({ shape: new Rect(vec2(-22, -20), 44, 40) }), "enc"]);
     e.enemyIndex = i; e.enemyName = name;
     const by = sg.y + 50;
@@ -646,48 +689,130 @@ scene("cave", (opts = {}) => {
   });
   player.onCollide("enc", (e) => {
     if (dialogOpen) return;
-    if (e.enemyIndex !== state.cave) { player.pos.y += 12; return; }
     player.pos.y += 12;
-    const intro = ENEMIES[e.enemyName].meet;
-    say(intro, () => go("battle", e.enemyName));
+    if (e.enemyIndex !== state.cave) return;
+    say(ENEMIES[e.enemyName].meet, () => go("battle", e.enemyName));
   });
 
-  // Bugon guards the inner door once the six are down
+  // the fork itself: a one-time signpost
+  add([rect(44, 10), pos(bs.x, corrY + 8), area(), "forkzone"]);
+  player.onCollide("forkzone", () => {
+    if (dialogOpen || state.branchSeen) return;
+    state.branchSeen = true;
+    say(["* The tunnel forks. A passage goes left, and one goes right.", "* One of them smells like cotton candy. The other smells like trouble.", "* You can't tell which is which."]);
+  });
+
+  // Bugon guards the way to the chamber once the six are down
   if (state.cave >= CAVE_ENEMIES.length && !state.beatBugon) {
     const sg = segs[8];
     const b = add([sprite("bugon"), pos(sg.x + 22, sg.y + 40), anchor("center"), z(5), area({ shape: new Rect(vec2(-24, -22), 48, 44) }), "bugonzone"]);
     b.onUpdate(() => { b.pos.y = sg.y + 40 + Math.abs(Math.sin(time() * 4)) * -3; });
-    player.onCollide("bugonzone", () => {
-      if (dialogOpen) return;
-      player.pos.y += 12;
-      say(ENEMIES.bugon.meet, () => go("battle", "bugon"));
-    });
+    player.onCollide("bugonzone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.bugon.meet, () => go("battle", "bugon")); });
   }
-  // the inner chamber door
-  const top = segs[segs.length - 1];
-  add([rect(44, 30), pos(top.x, 4), color(20, 16, 30), z(2)]);
-  add([rect(36, 24), pos(top.x + 4, 6), color(60, 20, 70), z(2)]);
-  const doorGlow = add([rect(44, 30), pos(top.x, 4), color(199, 123, 214), opacity(0.2), z(3)]);
-  doorGlow.onUpdate(() => { doorGlow.opacity = 0.1 + 0.15 * Math.abs(Math.sin(time() * 3)); });
-  add([rect(44, 8), pos(top.x, 20), area(), "lygondoor"]);
-  player.onCollide("lygondoor", () => {
-    if (dialogOpen) return;
-    player.pos.y += 12;
-    if (!state.beatBugon) { say(["* The door is shut tight. Something big is still guarding it."]); return; }
-    say(ENEMIES.lygon.meet, () => go("battle", "lygon"));
-  });
+  // Lygon waits at the top of the tunnel once Bugon is gone; no door, just him
+  if (state.beatBugon) {
+    const top = segs[segs.length - 1];
+    const spot = add([rect(70, 40), pos(top.x - 13, 6), color(199, 123, 214), opacity(0.15), z(0)]);
+    spot.onUpdate(() => { spot.opacity = 0.1 + 0.12 * Math.abs(Math.sin(time() * 3)); });
+    const ly = add([sprite("lygon"), pos(top.x + 22, 30), anchor("center"), z(5), area({ shape: new Rect(vec2(-22, -22), 44, 44) }), "lygonzone"]);
+    ly.onUpdate(() => { ly.pos.y = 30 + Math.sin(time() * 2) * 2; });
+    player.onCollide("lygonzone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.lygon.meet, () => go("battle", "lygon")); });
+  }
 
-  // exit back to town at the bottom
-  add([rect(44, 6), pos(start.x, CAVE_H - 8), area(), "caveexit"]);
+  // the very bottom of the tunnel is the way out
+  add([rect(60, 16), pos(start.x - 8, CAVE_H - 18), area(), "caveexit"]);
   player.onCollide("caveexit", () => { if (!dialogOpen) go("town"); });
 
+  player.onCollide("sideL", () => { if (!dialogOpen) go("sideroom", { side: "left" }); });
+  player.onCollide("sideR", () => { if (!dialogOpen) go("sideroom", { side: "right" }); });
   hud();
   const fights = CAVE_ENEMIES.length - state.cave;
   wait(0.3, () => say(state.cave === 0
     ? ["* It's dark. It smells like wet rock and cotton candy.", "* Something is chittering up ahead."]
-    : state.beatBugon ? ["* The way to the chamber is open. This is it."]
+    : state.beatBugon ? ["* The way to the top is open. He's up there. So are they."]
     : [`* ${fights} of the clown's critters left between you and the big-eared one.`]));
 });
+
+// ---------------------------------------------------------------- scene: side room
+// Off the fork. One side holds a present, the other an ambush; which is which is rolled per run.
+scene("sideroom", (opts = {}) => {
+  resetCam();
+  music.play("cave");
+  window.__frozen = false;
+  const side = opts.side || "left";
+  const entryRight = side === "left"; // walking off the left edge of the tunnel puts you on this room's right edge
+  add([rect(W, H), pos(0, 0), color(38, 32, 54)]);
+  for (let i = 0; i < 90; i++) add([rect(rand(2, 5), rand(2, 4)), pos(rand(0, W), rand(0, H)), color(52, 44, 72)]);
+  const room = { x: 60, y: 50, w: 200, h: 140 };
+  add([rect(room.w, room.h), pos(room.x, room.y), color(86, 74, 104), z(1)]);
+  const doorY = room.y + room.h / 2 - 13, doorH = 26;
+  // the way you came in: a short corridor to the screen edge
+  if (entryRight) add([rect(W - (room.x + room.w), doorH), pos(room.x + room.w, doorY), color(96, 84, 112), z(1)]);
+  else add([rect(room.x, doorH), pos(0, doorY), color(96, 84, 112), z(1)]);
+  // walls: around the room except the corridor gap, plus corridor sides
+  wall(0, 0, W, room.y); wall(0, room.y + room.h, W, H - (room.y + room.h));
+  if (entryRight) {
+    wall(0, room.y, room.x, room.h);
+    wall(room.x + room.w, room.y, W - (room.x + room.w), doorY - room.y);
+    wall(room.x + room.w, doorY + doorH, W - (room.x + room.w), room.y + room.h - (doorY + doorH));
+    add([rect(6, doorH), pos(W - 6, doorY), area(), "back"]);
+  } else {
+    wall(room.x + room.w, room.y, W - (room.x + room.w), room.h);
+    wall(0, room.y, room.x, doorY - room.y);
+    wall(0, doorY + doorH, room.x, room.y + room.h - (doorY + doorH));
+    add([rect(6, doorH), pos(0, doorY), area(), "back"]);
+  }
+  for (const [tx, ty] of [[room.x + 8, room.y + 8], [room.x + room.w - 12, room.y + 8]]) {
+    const t = add([rect(3, 6), pos(tx, ty), color(255, 160, 64), z(2)]);
+    t.onUpdate(() => { t.color = rgb(255, 130 + rand(0, 60), 40); });
+  }
+
+  const px = entryRight ? W - 40 : 18, py = doorY - 14;
+  const player = makePlayer(px, py);
+  player.onCollide("back", () => { if (!dialogOpen && !window.__frozen) go("cave", { resume: true, at: "branch" }); });
+
+  const cx = room.x + room.w / 2, cy = room.y + room.h / 2;
+  if (side === state.branchSide) {
+    // the present: a Giant Sword
+    if (!state.giantSword) {
+      const pr = add([sprite("present"), pos(cx - 8, cy - 8), anchor("topleft"), area(), body({ isStatic: true }), z(8), "npc", "present2"]);
+      const sp = add([text("*", { size: 8 }), pos(cx, cy - 16), anchor("center"), color(242, 208, 92), z(9)]);
+      sp.onUpdate(() => { sp.hidden = Math.floor(time() * 4) % 3 === 0; sp.pos.x = cx + Math.sin(time() * 5) * 10; });
+      pr.talk = () => {
+        say(["* A present. Down here. With a bow on it.", "* You tear off the paper.", "* ..."], () => {
+          destroy(pr); destroy(sp); state.giantSword = true; music.sfx("pickup"); save("cave");
+          const sw = add([sprite("sword"), pos(player.pos.x + 11, player.pos.y - 30), anchor("center"), scale(2), z(60)]);
+          sw.onUpdate(() => { sw.pos.y -= 6 * dt(); sw.angle = Math.sin(time() * 6) * 5; });
+          const flare = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.7), z(55), fixed()]);
+          flare.onUpdate(() => { flare.opacity = Math.max(0, flare.opacity - 1.2 * dt()); });
+          shake(8);
+          wait(1.4, () => { destroy(sw); say([`* ${state.name} got the GIANT SWORD!`, "* It is much, much bigger than the other sword.", "* Slash now hits a LOT harder."]); });
+        });
+      };
+      wait(0.3, () => say(["* A small room. It smells like cotton candy.", "* Something in the middle is sparkling."]));
+    } else wait(0.3, () => say(["* The room where you found the Giant Sword. Just torn wrapping paper now."]));
+  } else {
+    // the ambush: it sees you first and walks straight at you
+    if (!state.branchDone) {
+      const far = entryRight ? room.x + 30 : room.x + room.w - 30;
+      const foe = add([sprite(state.branchEnemy), pos(far, cy), anchor("center"), z(6), "ambusher"]);
+      let sprung = false;
+      foe.onUpdate(() => {
+        if (!sprung) { foe.pos.y = cy + Math.sin(time() * 3) * 2; return; }
+        const target = player.pos.add(11, 16);
+        const d = target.sub(foe.pos);
+        if (d.len() > 26) foe.pos = foe.pos.add(d.unit().scale(70 * dt()));
+        else if (window.__frozen) {
+          window.__frozen = false; sprung = false; foe.paused = true;
+          say(["* It saw you first. It's already moving.", "* There's nowhere to go but through it."], () => go("battle", "ambush"));
+        }
+      });
+      wait(0.6, () => { sprung = true; window.__frozen = true; music.play("danger"); music.sfx("bang"); });
+    } else wait(0.3, () => say(["* The room where that thing jumped you. Empty now.", "* Still smells like trouble."]));
+  }
+  hud();
+});
+
 
 // ---------------------------------------------------------------- scene: battle
 
@@ -769,7 +894,15 @@ const PSI = [
 
 scene("battle", (which) => {
   resetCam();
-  const def = ENEMIES[which];
+  window.__frozen = false;
+  let def = ENEMIES[which];
+  if (which === "ambush") {
+    const base = ENEMIES[state.branchEnemy];
+    def = { ...base, name: "WILD " + base.name, hp: base.hp + 8, small: true,
+      intro: [`* A WILD ${base.name} got the jump on you!`],
+      win: [`* The WILD ${base.name} ran off into the dark.`, "* The side room is quiet now."],
+      next: () => { state.branchDone = true; state.hp = Math.min(state.maxHp, state.hp + 10); state.pp = Math.min(state.maxPp, state.pp + 6); go("cave", { resume: true, at: "branch" }); } };
+  }
   music.sfx("battle_start");
   music.play(def.small ? "battle" : "boss");
   const boss = { name: def.name, hp: def.hp, maxHp: def.hp, frozen: 0 };
@@ -810,7 +943,7 @@ scene("battle", (which) => {
   const ebar = add([rect(100, 6), pos(W / 2 - 50, 154), color(224, 69, 63), z(21)]);
   ebar.onUpdate(() => { ebar.width = 100 * Math.max(0, boss.hp) / boss.maxHp; });
   add([text(boss.name, { size: 8 }), pos(W / 2, 144), anchor("center"), color(232, 232, 240), z(21)]);
-  if (def.small) add([text(`cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
+  if (def.small && which !== "ambush") add([text(`cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
 
   const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
   const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
@@ -890,9 +1023,9 @@ scene("battle", (which) => {
     if (o === "Slash") {
       music.sfx("slash");
       const crit = Math.random() < 0.2;
-      const dmg = randi(8, 12) * (crit ? 2 : 1);
-      const slash = add([rect(40, 3), pos(W / 2, 88), anchor("center"), color(244, 241, 234), rotate(-40), z(40), lifespan(0.15)]);
-      hitBoss(dmg, crit ? "did a HUGE spinning slash!" : "slashed with the sword!");
+      const dmg = (state.giantSword ? randi(12, 18) : randi(8, 12)) * (crit ? 2 : 1);
+      add([rect(state.giantSword ? 70 : 40, state.giantSword ? 5 : 3), pos(W / 2, 88), anchor("center"), color(244, 241, 234), rotate(-40), z(40), lifespan(0.15)]);
+      hitBoss(dmg, state.giantSword ? (crit ? "swung the GIANT SWORD in a huge arc!" : "swung the GIANT SWORD!") : (crit ? "did a HUGE spinning slash!" : "slashed with the sword!"));
     } else if (o === "Run") {
       say(["* You tried to run.", `* Then you remembered ${state.sis} and ${state.bro}. You did not run.`], enemyTurn);
     }
@@ -926,7 +1059,7 @@ scene("battle", (which) => {
     if (state.hp <= 0) {
       music.sfx("lose");
       say([line, `* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."],
-        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", { resume: true, lost: true }); });
+        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true }); });
     } else say([line], () => busy = false);
   }
 
