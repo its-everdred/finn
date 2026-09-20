@@ -3926,7 +3926,9 @@ Object.assign(window.SPRITES, {
 // Phase 4: Malagore as a spirit, a pale violet ghost with a hood swept up to the right, hollow
 // jagged eye holes, a jagged grin with the tongue out, and a wisp of a tail.  Phase 5: the man
 // underneath, bald and grey-green, one wide red eye and one narrowed, a ragged dark tunic.
-// The spirit fragment orbits him in phase 4.  Private palette: violets for the spirit,
+// The spirit fragment orbits him in phase 4.  The minion is the squat horned knight who
+// steals the orb: steel plate, giant sword up, the orb on a staff.  Private palette: violets
+// for the spirit,
 // grey-green skin and a night-blue tunic for the person.
 const PAL_MG2 = Object.assign({}, PAL, {
   "+": "#f7f2fd", "&": "#dccdf2", "*": "#b39ddc", "=": "#5b3f8f",
@@ -4076,8 +4078,73 @@ const MALAGORE5 = [
   "........................................",
 ];
 
+// MALAGORE's minion: horned knight, plate armor, giant sword up, staff with the orb (44 x 60)
+const MG_MINION = [
+  "...jjjj............................jjj......",
+  "..jzjej............................jzj......",
+  ".jzzjeej...........................jzj......",
+  "jzzzjzezj.........................jzzj.jjj..",
+  "jeezEjzej.........................jzzjjwpPj.",
+  "jeezEjzeej.......................jzzjjwppPPj",
+  "jeezEzjzeej......................jzzjjpppPfj",
+  "jeezEzjzzeej....................jzzqjjPPPPfj",
+  "jeezEzqjzzeejjjjjjjjjjjjjjjjjjjjjzzj..jPPfj.",
+  "jeezEzqjjzzzjeeeeeeeeeeeeeeeeeeqjzj..j.jPj.j",
+  "jeezEzqj.jjzjejzzzzzzzzzzzzzzzjqjj...jjtttjj",
+  "jeezEzqj...jjezzzzzzzzzzzzzzzzqqj....jjjTTjj",
+  "jeezEzqj....jezzzzzzzzzzzzzzzzqqj.......jj..",
+  "jeezEzqj....jezjjjjjjjjjjjjjjjqqj.......jj..",
+  "jeezEzqj....jezjkwkkkkkkkkkwkjqqj.......jj..",
+  "jeezEzqj....jezjkkwwkkkkkwwkkjqqj.......jj..",
+  "jeezEzqj....jezjkkkrwkkkwrkkkjqqj.......jj..",
+  "jeezEzqj....jezjkkkkrkkkrkkkkjqqj.......jj..",
+  "jeezEzqj....jezjjjjjjjjjjjjjjjqqj.......jj..",
+  "jeezEzqj....jezzzzjwwjzjwwjzzzqqj.......jj..",
+  "jeezEzqj....jezzzzjwwjzjwwjzzzqqj.......jj..",
+  "jeezEzqj....jezzzzjwwjzjwwjzzzqqj.......jj..",
+  "jeezEzqj....jejzzzzjwjzzjwjzzzjqj.......jj..",
+  "jeezEzqj....jezzzzzjwjzzjwjzzzqqj.......jj..",
+  "jeezEzqj....jqqqqqqjwjqqjwjqqqqqj.......jj..",
+  "jeezEzqj....jjjjjjjjjjjjjjjjjjjjj.......jj..",
+  "jeezEzqj....jeeeeeejjeeejjeeezqqj.......jj..",
+  "jeezEzqj....jeeeeeeeeeeeeeeeeeeqj.......jj..",
+  "jeezEzqj....jeejzzzzzzzzzzzzzjqqj.......jj..",
+  "jeezEzqj....jeezzzzzzzqzzzzzzzqqj...j..jjjj.",
+  "jiiittttjj..jeezzzzzzzqzzzzzzzqqj...jjjzjjzj",
+  "jttttttttj..jeezzzzzzzqzzzzzzzqqj...jezzzzzj",
+  "jjjTTTjjjj.jjeezzzzzzzqzzzzzzzqqjjjjjezzzzzj",
+  ".j.jjj.j..jzjeezzzzzzzqzzzzzzzqqjzzzjezzzzzj",
+  ".jjjzjjjjjzzjeezzzzzzzjzzzzzzzqqjjjjjezzzzzj",
+  ".jezzzzjzzzzjeezzzzzzzqzzzzzzzqqj...jezzzzzj",
+  ".jezzzzjzzjjjeezzzzzzzqzzzzzzzqqj...jjjjjjjj",
+  ".jezzzzjzj..jeezzzzzzzqzzzzzzzqqj.......jj..",
+  ".jezzzzjj...jeezzzzzzzqzzzzzzzqqj.......jj..",
+  ".jezzzzj....jeezzzzzzzqzzzzzzzqqj.......jj..",
+  ".jjjjjjj....jeezzzzzzzjzzzzzzzqqj.......jj..",
+  "............jeezzzzzzzzzzzzzzzqqj.......jj..",
+  "............jeezzzzzzzzzzzzzzzqqj.......jj..",
+  "............jzejzzzzzzzzzzzzzjqqj.......jj..",
+  "............jzezzzzzzzzzzzzzzzqqj.......jj..",
+  "............jqqqqqqqqqqqqqqqqqqqj.......jj..",
+  "............jjjjjjjjjjjjjjjjjjjjj.......jj..",
+  "...............jqQQQj...jqQQQj..........jj..",
+  "...............jqQQQj...jqQQQj..........jj..",
+  "...............jqQQQj...jqQQQj..........jj..",
+  "...............jqQQQj...jqQQQj..........jj..",
+  "...............jqQQQj...jqQQQj..........jj..",
+  "...............jqQQQj...jqQQQj..........jj..",
+  ".............jjjjjjjjj.jjjjjjjjjj.......jj..",
+  ".............jQQkkkkkj.jQQkkkkkkj.......jj..",
+  ".............jQQkkkkkj.jQQkkkkkkj.......jj..",
+  ".............jkkkkkkkj.jkkkkkkkkj.......jj..",
+  ".............jjjjjjjjj.jjjjjjjjjj...........",
+  ".............jjjjjjjjj.jjjjjjjjjj...........",
+  "............................................",
+];
+
 Object.assign(window.SPRITES, {
   malagore4: { rows: MALAGORE4, pal: PAL_MG2 },
   spiritbit: { rows: MG_SPIRITBIT, pal: PAL_MG2 },
   malagore5: { rows: MALAGORE5, pal: PAL_MG2 },
+  minion: { rows: MG_MINION, pal: PAL_MG2 },
 });
