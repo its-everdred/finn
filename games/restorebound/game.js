@@ -816,6 +816,14 @@ scene("sideroom", (opts = {}) => {
 
 // ---------------------------------------------------------------- scene: battle
 
+// Every enemy carries a `mini` block that tunes its turn minigames. Tuning is data:
+//   attack:   how the player's power is decided — "mash" | "timing" | "sequence", or one per action
+//             as { slash, fire, ice, star }. Power only ever scales damage; an attack never fails.
+//   defend:   how the player shaves incoming damage — "mashB" | "block" | "wait" (never to zero).
+//   pick:     which defend entry runs — "first" (default) | "cycle" | "random" | "phase".
+//   phases:   for pick "phase" — [{ above: hpFraction, defend, fakeouts, flurry }], first match wins.
+//   speed:    sweeps and timers run this much faster.   zone: perfect-zone width as a fraction of the track.
+//   zones:    sweet zones per timing sweep.   fakeouts: fake twitches in a WAIT.   double: chance of two attacks.
 const ENEMIES = {
   chompo: {
     name: "CHOMPO", spr: "chompo", hp: 16, weak: "ice", bg: [30, 50, 60], band: [40, 70, 80],
@@ -823,6 +831,7 @@ const ENEMIES = {
     intro: ["* CHOMPO wants to bite something!"],
     attacks: [{ t: "chomped at %n!", d: [2, 4] }, { t: "licked its own eye.", d: [0, 0] }],
     win: ["* CHOMPO burped and hopped away."], small: true,
+    mini: { attack: "mash", defend: ["mashB"], speed: 1.0, zone: 0.3 },
   },
   zagg: {
     name: "ZAGG", spr: "zagg", hp: 20, weak: "fire", bg: [30, 40, 70], band: [40, 55, 95],
@@ -830,6 +839,7 @@ const ENEMIES = {
     intro: ["* ZAGG is grinning. It has a LOT of grin."],
     attacks: [{ t: "grinned at %n! It's very unsettling.", d: [2, 5] }, { t: "blinked. Slowly.", d: [0, 0] }],
     win: ["* ZAGG's grin got smaller and smaller until it left."], small: true,
+    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "timing" }, defend: ["block"], speed: 1.0, zone: 0.3 },
   },
   skitter: {
     name: "SKITTER", spr: "skitter", hp: 22, weak: "ice", bg: [50, 35, 60], band: [70, 50, 85],
@@ -837,6 +847,7 @@ const ENEMIES = {
     intro: ["* SKITTER's headlamp is pointed right at you!"],
     attacks: [{ t: "zapped %n with its headlamp!", d: [3, 5] }, { t: "scuttled in a circle.", d: [0, 0] }],
     win: ["* SKITTER's little legs gave out. It rolled away."], small: true,
+    mini: { attack: "timing", defend: ["block"], speed: 1.2, zone: 0.3 },
   },
   wibblo: {
     name: "WIBBLO", spr: "wibblo", hp: 24, weak: "fire", bg: [60, 30, 60], band: [85, 45, 85],
@@ -844,6 +855,7 @@ const ENEMIES = {
     intro: ["* WIBBLO's antennae are wiggling menacingly!"],
     attacks: [{ t: "bonked %n with an antenna!", d: [3, 6] }, { t: "wibbled.", d: [0, 0] }],
     win: ["* WIBBLO wibbled off in a huff."], small: true,
+    mini: { attack: "timing", defend: ["wait"], speed: 1.0, zone: 0.3, fakeouts: 0 },
   },
   redstack: {
     name: "REDSTACK", spr: "redstack", hp: 28, weak: "ice", bg: [70, 25, 30], band: [95, 40, 45],
@@ -851,6 +863,7 @@ const ENEMIES = {
     intro: ["* REDSTACK is stacking up!"],
     attacks: [{ t: "swung a claw at %n!", d: [3, 6] }, { t: "checked %n for a ticket. Found none.", d: [1, 3] }],
     win: ["* REDSTACK toppled over one segment at a time. Clonk. Clonk. Clonk."], small: true,
+    mini: { attack: "timing", zones: 2, defend: ["mashB", "wait"], pick: "cycle", speed: 1.0, zone: 0.28, fakeouts: 1 },
   },
   boxor: {
     name: "BOXOR", spr: "boxor", hp: 36, weak: "fire", bg: [55, 30, 65], band: [80, 45, 90],
@@ -858,6 +871,7 @@ const ENEMIES = {
     intro: ["* BOXOR's red eye lit up!", "BOXOR: NO REFUNDS."],
     attacks: [{ t: "fired an eye beam at %n!", d: [4, 7] }, { t: "stomped! The cave shook!", d: [3, 5] }, { t: "rebooted.", d: [0, 0] }],
     win: ["* BOXOR's eye flickered out.", "BOXOR: ...intermission."], small: true,
+    mini: { attack: { slash: "timing", fire: "timing", ice: "timing", star: "sequence" }, defend: ["wait"], speed: 1.1, zone: 0.3, fakeouts: 2 },
   },
   bugon: {
     name: "BUGON", spr: "bugon", hp: 45, weak: "ice", bg: [60, 30, 90], band: [90, 50, 130],
@@ -870,6 +884,7 @@ const ENEMIES = {
     ],
     win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open."],
     next: () => { state.beatBugon = true; state.hp = state.maxHp; state.pp = state.maxPp; go("cave", { resume: true }); },
+    mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["mashB", "block", "wait"], pick: "random", speed: 1.2, zone: 0.28, fakeouts: 1, double: 0.3 },
   },
   lygon: {
     name: "LYGON", spr: "lygon", hp: 80, weak: "fire", bg: [90, 30, 40], band: [130, 50, 60],
@@ -883,6 +898,10 @@ const ENEMIES = {
     ],
     win: ["LYGON: ...no encore?", "* LYGON folded up like a lawn chair and vanished in a puff of confetti.", "* Two cage doors swung open."],
     next: () => go("end"),
+    mini: {
+      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.26, pick: "phase",
+      phases: [{ above: 0.66, defend: "block" }, { above: 0.33, defend: "wait", fakeouts: 2 }, { above: 0, defend: "mashB", flurry: true }],
+    },
   },
 };
 
@@ -891,6 +910,188 @@ const PSI = [
   { name: "Ice", pp: 6, dmg: [10, 14], kind: "ice", verb: "used PSI Ice! Brrr!", freeze: true },
   { name: "Starstorm", pp: 14, dmg: [22, 30], kind: "star", verb: "used PSI STARSTORM!!" },
 ];
+
+// ---------------------------------------------------------------- battle minigames
+// Each one draws in the strip between the enemy's HP bar and the panels, listens for A (INTERACT)
+// or B (BACK), and always ends on its own: a hard timer resolves it when nobody presses anything.
+// They decide how much an action does, never whether it happens.
+
+const TRACK = { x: 40, y: 173, w: 240, h: 11 };
+const MINI = "minigame";
+const C_INK = [232, 232, 240], C_GOLD = [242, 208, 92], C_GREEN = [79, 176, 106], C_TEAL = [51, 199, 193], C_RED = [224, 69, 63], C_GREY = [138, 138, 153];
+
+// the press that closed the text box or the menu is still in flight when a minigame starts; it does not count
+function miniKeys(keys, fn) {
+  const born = time();
+  const hs = keys.map((k) => onKeyPress(k, () => { if (time() - born > 0.1) fn(); }));
+  return () => hs.forEach((h) => h.cancel());
+}
+function miniPrompt(txt, x, y, size, col) {
+  return add([text(txt, { size }), pos(x, y), anchor("center"), color(...col), z(30), MINI]);
+}
+function miniTrack() {
+  return add([rect(TRACK.w, TRACK.h), pos(TRACK.x, TRACK.y), color(20, 20, 36), outline(1, rgb(...C_INK)), z(26), MINI]);
+}
+// a zone on the track; from/to are fractions of its width
+function miniZone(from, to, col, zz, tag) {
+  const x0 = TRACK.x + Math.max(0, from) * TRACK.w, x1 = TRACK.x + Math.min(1, to) * TRACK.w;
+  return add([rect(Math.max(1, x1 - x0), TRACK.h - 2), pos(x0, TRACK.y + 1), color(...col), z(zz), MINI, tag || "minigood"]);
+}
+function miniMarker() {
+  return add([rect(3, TRACK.h + 6), pos(TRACK.x, TRACK.y - 3), color(...C_INK), outline(1, rgb(20, 20, 36)), z(29), MINI, "minimarker"]);
+}
+// the verdict: a big word that floats up over the enemy; a shake when it was perfect
+function miniResult(label) {
+  const col = label === "PERFECT!" ? C_GOLD : label === "TOO EARLY!" ? C_RED : label === "GOOD" ? C_INK : C_GREY;
+  add([text(label, { size: label === "PERFECT!" ? 18 : 14 }), pos(W / 2, 128), anchor("center"), color(...col), z(46), opacity(1), lifespan(0.9, { fade: 0.4 }), move(UP, 18), "miniresult"]);
+  if (label === "PERFECT!") shake(10);
+}
+function gradeOf(ratio) { return ratio >= 1 ? "perfect" : ratio >= 0.5 ? "good" : "miss"; }
+function gradeLabel(g) { return g === "perfect" ? "PERFECT!" : g === "good" ? "GOOD" : g === "early" ? "TOO EARLY!" : "MISS"; }
+
+// MASH: every press fills the bar a little; the counter bounces. Resolves with the fill ratio (0..1).
+function miniMash(o, done) {
+  const dur = (o.duration || 2) / (o.speed || 1), target = Math.round(6 * dur);
+  miniTrack();
+  const fill = add([rect(1, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...(o.hot || C_GOLD)), z(27), MINI]);
+  const clock = add([rect(TRACK.w - 2, 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), z(28), MINI]);
+  miniPrompt(o.prompt, W / 2 - 30, 163, 14, o.hot || C_GOLD);
+  const counter = add([text("0", { size: 18 }), pos(W / 2 + 78, 163), anchor("center"), color(...C_INK), z(30), scale(1), MINI]);
+  let n = 0, t = 0, over = false;
+  const off = miniKeys(o.keys, () => {
+    if (over) return;
+    n += 1; music.sfx("select");
+    counter.text = `${n}`; counter.scale = vec2(1.8);
+    fill.width = Math.max(1, (TRACK.w - 2) * Math.min(1, n / target));
+  });
+  counter.onUpdate(() => {
+    t += dt();
+    counter.scale = vec2(Math.max(1, counter.scale.x - 5 * dt()));
+    clock.width = (TRACK.w - 2) * Math.max(0, 1 - t / dur);
+    // a flurry: bits of pie rain past the track while you block
+    if (o.flurry && Math.random() < 0.25) add([rect(3, 3), pos(rand(TRACK.x, TRACK.x + TRACK.w), 150), color(...C_RED), z(28), opacity(1), lifespan(0.4), move(DOWN, 140), MINI]);
+  });
+  wait(dur, () => {
+    over = true; off();
+    const ratio = Math.min(1, n / target);
+    destroyAll(MINI);
+    miniResult(gradeLabel(gradeOf(ratio)));
+    wait(0.45, () => done(ratio));
+  });
+}
+
+// TIMING: a marker sweeps the track once; press inside the sweet zone. Resolves "perfect" | "good" | "miss".
+function miniTiming(o, done) {
+  const speed = o.speed || 1, n = o.zones || 1, pw = (o.zone || 0.3) * (n > 1 ? 0.75 : 1), gw = pw + 0.18;
+  const dur = 1.4 / speed;
+  const zones = [];
+  for (let i = 0; i < n; i++) zones.push(n === 1 ? rand(0.42, 0.62) : 0.3 + i * 0.4 + rand(-0.05, 0.05));
+  miniTrack();
+  zones.forEach((c) => miniZone(c - gw / 2, c + gw / 2, C_GREEN, 27));
+  zones.forEach((c) => miniZone(c - pw / 2, c + pw / 2, o.hot || C_GOLD, 28, "minizone"));
+  const marker = miniMarker();
+  miniPrompt(o.prompt || "TAP A!", W / 2, 163, 14, o.hot || C_GOLD);
+  // the marker sits parked for a beat first, so a press carried over from the menu is not the tap
+  const ARM = 0.3;
+  let t = -ARM, over = false;
+  marker.onUpdate(() => { t += dt(); marker.pos.x = TRACK.x + Math.min(1, Math.max(0, t / dur)) * TRACK.w - 1; });
+  function finish(res) {
+    if (over) return; over = true; off(); timer.cancel();
+    destroyAll(MINI);
+    miniResult(gradeLabel(res));
+    wait(0.45, () => done(res));
+  }
+  const off = miniKeys(o.keys || INTERACT, () => {
+    if (t < 0) return;
+    const f = t / dur, d = Math.min(...zones.map((c) => Math.abs(f - c)));
+    music.sfx("select");
+    finish(d <= pw / 2 ? "perfect" : d <= gw / 2 ? "good" : "miss");
+  });
+  const timer = wait(ARM + dur + 0.12, () => finish("miss"));
+}
+
+// SEQUENCE: three sweeps one after another, alternating direction; a press inside the zone adds a star.
+// Resolves with the number of hits (0..3).
+function miniSequence(o, done) {
+  const speed = o.speed || 1, pw = o.zone || 0.3, gw = pw + 0.14, dur = 0.85 / speed, N = 3;
+  miniTrack();
+  miniPrompt("TAP A! x3", W / 2 - 40, 163, 14, C_GOLD);
+  const stars = [0, 1, 2].map((i) => add([text("*", { size: 20 }), pos(W / 2 + 52 + i * 18, 167), anchor("center"), color(...C_GREY), z(30), scale(1), MINI]));
+  stars[0].onUpdate(() => stars.forEach((s) => s.scale = vec2(Math.max(1, s.scale.x - 4 * dt()))));
+  let hits = 0, i = 0, over = false, off = null;
+  function finish() {
+    if (over) return; over = true; if (off) off(); guard.cancel();
+    destroyAll(MINI);
+    miniResult(hits >= N ? "PERFECT!" : hits > 0 ? "GOOD" : "MISS");
+    wait(0.45, () => done(hits));
+  }
+  function sweep() {
+    if (over) return;
+    if (i >= N) return finish();
+    const dir = i % 2 === 0 ? 1 : -1, c = rand(0.35, 0.65);
+    const zg = miniZone(c - gw / 2, c + gw / 2, C_GREEN, 27), zp = miniZone(c - pw / 2, c + pw / 2, C_GOLD, 28, "minizone");
+    const marker = miniMarker();
+    const arm = i === 0 ? 0.3 : 0; // the first sweep parks for a beat, like a timing sweep
+    let t = -arm, pressed = false;
+    marker.onUpdate(() => { t += dt(); const f = Math.min(1, Math.max(0, t / dur)); marker.pos.x = TRACK.x + (dir > 0 ? f : 1 - f) * TRACK.w - 1; });
+    off = miniKeys(INTERACT, () => {
+      if (pressed || t < 0) return; pressed = true;
+      const f = dir > 0 ? t / dur : 1 - t / dur, ok = Math.abs(f - c) <= gw / 2;
+      music.sfx(ok ? "select" : "back");
+      if (ok) { hits += 1; stars[i].color = rgb(...C_GOLD); stars[i].scale = vec2(1.6); }
+      marker.color = rgb(...(ok ? C_GOLD : C_RED));
+    });
+    wait(arm + dur + 0.1, () => { if (over) return; off(); off = null; destroy(zg); destroy(zp); destroy(marker); i += 1; wait(0.12, sweep); });
+  }
+  const guard = wait(N * (dur + 0.3) + 1.5, finish);
+  sweep();
+}
+
+// WAIT: the enemy winds up ("WAIT...") then strikes ("NOW!"). A press during the wind-up is punished; a
+// press right after NOW! blocks most of the hit. Fake-outs twitch the sprite without a NOW!.
+// Resolves "perfect" | "miss" | "early".
+function miniWait(o, done) {
+  const speed = o.speed || 1, fakes = o.fakeouts || 0, spr = o.spr;
+  const windup = rand(0.8, 1.6) / speed + fakes * 0.35;
+  const home = spr ? spr.pos.clone() : null;
+  const prompt = miniPrompt("WAIT...", W / 2, 163, 18, C_INK);
+  miniTrack();
+  const pulse = add([rect(TRACK.w - 2, TRACK.h - 2), pos(TRACK.x + 1, TRACK.y + 1), color(...C_GREY), opacity(0.3), z(27), MINI]);
+  let t = 0, phase = "wait", early = false, over = false;
+  pulse.onUpdate(() => {
+    t += dt();
+    pulse.opacity = phase === "wait" ? 0.15 + 0.2 * Math.abs(Math.sin(t * 6)) : 0.95;
+    if (phase === "now") prompt.pos.x = W / 2 + rand(-2, 2);
+  });
+  function lunge(dy, dur) { if (!spr) return; spr.pos.y = home.y + dy; wait(dur, () => { if (spr.exists()) spr.pos.y = home.y; }); }
+  // fake-outs: a twitch and a "?!" that never turns into a NOW!
+  for (let i = 0; i < fakes; i++) wait((windup - 0.3) * (0.3 + 0.7 * (i + rand(0.2, 0.8)) / fakes), () => {
+    if (over || phase !== "wait") return;
+    lunge(-6, 0.14); music.sfx("move");
+    add([text("?!", { size: 10 }), pos(W / 2 + 34, 50), anchor("center"), color(...C_GREY), z(30), opacity(1), lifespan(0.35, { fade: 0.2 }), MINI]);
+  });
+  function finish(res) {
+    if (over) return; over = true; off(); destroyAll(MINI);
+    if (spr && spr.exists()) spr.pos.y = home.y;
+    miniResult(gradeLabel(res));
+    wait(0.45, () => done(res));
+  }
+  const off = miniKeys(INTERACT.concat(BACK), () => {
+    if (phase === "wait") {
+      if (early || t < 0.35) return;
+      early = true; music.sfx("back");
+      add([text("TOO EARLY!", { size: 10 }), pos(W / 2, TRACK.y + TRACK.h / 2), anchor("center"), color(...C_RED), z(30), opacity(1), lifespan(0.6, { fade: 0.3 }), MINI]);
+      return;
+    }
+    music.sfx("select"); finish(early ? "early" : "perfect");
+  });
+  wait(windup, () => {
+    if (over) return;
+    phase = "now"; prompt.text = "NOW!"; prompt.textSize = 20; prompt.color = rgb(...C_GOLD);
+    lunge(10, 0.25); shake(6); music.sfx("slash");
+    wait(0.4, () => finish(early ? "early" : "miss"));
+  });
+}
 
 scene("battle", (which) => {
   resetCam();
@@ -901,13 +1102,16 @@ scene("battle", (which) => {
     def = { ...base, name: "WILD " + base.name, hp: base.hp + 8, small: true,
       intro: [`* A WILD ${base.name} got the jump on you!`],
       win: [`* The WILD ${base.name} ran off into the dark.`, "* The side room is quiet now."],
+      // a wild one plays the base enemy's minigames, a fifth faster
+      mini: { ...(base.mini || {}), speed: ((base.mini && base.mini.speed) || 1) * 1.2 },
       next: () => { state.branchDone = true; state.hp = Math.min(state.maxHp, state.hp + 10); state.pp = Math.min(state.maxPp, state.pp + 6); go("cave", { resume: true, at: "branch" }); } };
   }
   music.sfx("battle_start");
   music.play(def.small ? "battle" : "boss");
   const boss = { name: def.name, hp: def.hp, maxHp: def.hp, frozen: 0 };
+  const mini = def.mini || { attack: "timing", defend: ["block"] };
   let busy = true;
-  let menu = 0, sub = null, subIdx = 0;
+  let menu = 0, sub = null, subIdx = 0, defTurn = 0;
   const OPTIONS = ["Slash", "PSI", "Item", "Run"];
 
   add([rect(W, H), pos(0, 0), color(...def.bg)]);
@@ -915,9 +1119,10 @@ scene("battle", (which) => {
   for (let i = 0; i < 12; i++) bands.push(add([rect(W, 10), pos(0, i * 20), color(...def.band), opacity(0.5), z(1)]));
   onUpdate(() => bands.forEach((b, i) => { b.pos.y = ((i * 20 + time() * 25) % (H + 20)) - 10; }));
 
-  const bossSpr = add([sprite(def.spr), pos(W / 2, 88), anchor("center"), scale(2), z(5)]);
-  bossSpr.onUpdate(() => { if (!busy && !boss.frozen) bossSpr.pos.y = 88 + Math.sin(time() * 3) * 2; });
-  const frost = add([rect(90, 84), pos(W / 2, 88), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
+  const BY = 80; // the enemy stands a little high so the minigame strip fits under its HP bar
+  const bossSpr = add([sprite(def.spr), pos(W / 2, BY), anchor("center"), scale(2), z(5)]);
+  bossSpr.onUpdate(() => { if (!busy && !boss.frozen) bossSpr.pos.y = BY + Math.sin(time() * 3) * 2; });
+  const frost = add([rect(90, 84), pos(W / 2, BY), anchor("center"), color(51, 199, 193), opacity(0), z(6)]);
   frost.onUpdate(() => { frost.opacity = boss.frozen > 0 ? 0.35 : 0; });
   // captive siblings in the final fight
   if (which === "lygon") {
@@ -939,10 +1144,10 @@ scene("battle", (which) => {
     ppT.text = `PP ${state.pp}/${state.maxPp}`;
   });
 
-  add([rect(100, 6), pos(W / 2 - 50, 154), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
-  const ebar = add([rect(100, 6), pos(W / 2 - 50, 154), color(224, 69, 63), z(21)]);
+  add([rect(100, 6), pos(W / 2 - 50, 146), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
+  const ebar = add([rect(100, 6), pos(W / 2 - 50, 146), color(224, 69, 63), z(21)]);
   ebar.onUpdate(() => { ebar.width = 100 * Math.max(0, boss.hp) / boss.maxHp; });
-  add([text(boss.name, { size: 8 }), pos(W / 2, 144), anchor("center"), color(232, 232, 240), z(21)]);
+  add([text(boss.name, { size: 8 }), pos(W / 2, 136), anchor("center"), color(232, 232, 240), z(21)]);
   if (def.small && which !== "ambush") add([text(`cave ${state.cave + 1} / ${CAVE_ENEMIES.length}`, { size: 8 }), pos(W - 12, 8), anchor("topright"), color(207, 207, 216), z(21)]);
 
   const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
@@ -982,24 +1187,42 @@ scene("battle", (which) => {
   BACK.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen && sub) { sub = null; subIdx = 0; music.sfx("back"); } }));
   INTERACT.forEach((k) => onKeyPress(k, () => { if (!busy && !dialogOpen) confirm(); }));
 
+  // which minigame decides the power of this action, per the enemy's tuning
+  function attackKind(action) {
+    const a = mini.attack || "timing";
+    return typeof a === "string" ? a : (a[action] || "timing");
+  }
+  // the player's power minigame; done(multiplier, grade)
+  function powerUp(action, done) {
+    const kind = attackKind(action), speed = mini.speed || 1;
+    const zone = (mini.zone || 0.3) * (action === "ice" ? 0.65 : 1); // ice asks for a steadier hand
+    if (kind === "mash") miniMash({ prompt: "MASH A!", keys: INTERACT, duration: 2, speed }, (r) => done(0.6 + r, gradeOf(r)));
+    else if (kind === "sequence") miniSequence({ speed, zone }, (hits) => done(hits / 3 + 0.4, hits >= 3 ? "perfect" : hits > 0 ? "good" : "miss"));
+    else miniTiming({ prompt: "TAP A!", speed, zone, zones: mini.zones || 1 }, (g) => done(g === "perfect" ? 1.5 : g === "good" ? 1 : 0.5, g));
+  }
+
   function confirm() {
     if (sub === "psi") {
       if (subIdx === 3) { sub = null; subIdx = 0; music.sfx("back"); return; }
       const p = PSI[subIdx];
       if (state.pp < p.pp) { music.sfx("back"); say([`* Not enough PP for ${p.name}. (needs ${p.pp})`]); return; }
       sub = null; subIdx = 0; busy = true;
-      music.sfx("psi_" + p.kind);
+      music.sfx("select");
       state.pp -= p.pp;
-      let dmg = randi(p.dmg[0], p.dmg[1]);
-      const weak = p.kind === def.weak;
-      if (weak) dmg = Math.round(dmg * 1.5);
-      if (p.kind === "star") {
-        shake(20);
-        for (let i = 0; i < 14; i++) add([text("*", { size: 12 }), pos(rand(40, W - 40), rand(-10, 60)), color(242, 208, 92), z(40), lifespan(0.6), move(DOWN, 200)]);
-      }
-      if (p.kind === "fire") for (let i = 0; i < 10; i++) add([rect(3, 3), pos(W / 2 + rand(-30, 30), 88 + rand(-30, 30)), color(239, 143, 60), z(40), lifespan(0.5), move(UP, rand(40, 90))]);
-      if (p.freeze && Math.random() < 0.6) boss.frozen = 1;
-      hitBoss(dmg, p.verb + (weak ? " SUPER effective!" : "") + (p.freeze && boss.frozen ? ` ${boss.name} is frozen solid!` : ""));
+      powerUp(p.kind, (mult, grade) => {
+        music.sfx("psi_" + p.kind);
+        let dmg = Math.max(1, Math.round(randi(p.dmg[0], p.dmg[1]) * mult));
+        const weak = p.kind === def.weak;
+        if (weak) dmg = Math.round(dmg * 1.5);
+        if (p.kind === "star") {
+          shake(20);
+          for (let i = 0; i < 14; i++) add([text("*", { size: 12 }), pos(rand(40, W - 40), rand(-10, 60)), color(242, 208, 92), z(40), opacity(1), lifespan(0.6), move(DOWN, 200)]);
+        }
+        if (p.kind === "fire") for (let i = 0; i < 10; i++) add([rect(3, 3), pos(W / 2 + rand(-30, 30), BY + rand(-30, 30)), color(239, 143, 60), z(40), opacity(1), lifespan(0.5), move(UP, rand(40, 90))]);
+        // a perfect Ice always freezes; a shakier one sometimes does
+        if (p.freeze && (grade === "perfect" || Math.random() < (grade === "good" ? 0.6 : 0.3))) boss.frozen = 1;
+        hitBoss(dmg, p.verb + (grade === "perfect" ? " PERFECT!" : "") + (weak ? " SUPER effective!" : "") + (p.freeze && boss.frozen ? ` ${boss.name} is frozen solid!` : ""));
+      });
       return;
     }
     if (sub === "item") {
@@ -1021,11 +1244,14 @@ scene("battle", (which) => {
     if (o === "Item") { sub = "item"; subIdx = 0; return; }
     busy = true;
     if (o === "Slash") {
-      music.sfx("slash");
-      const crit = Math.random() < 0.2;
-      const dmg = (state.giantSword ? randi(12, 18) : randi(8, 12)) * (crit ? 2 : 1);
-      add([rect(state.giantSword ? 70 : 40, state.giantSword ? 5 : 3), pos(W / 2, 88), anchor("center"), color(244, 241, 234), rotate(-40), z(40), lifespan(0.15)]);
-      hitBoss(dmg, state.giantSword ? (crit ? "swung the GIANT SWORD in a huge arc!" : "swung the GIANT SWORD!") : (crit ? "did a HUGE spinning slash!" : "slashed with the sword!"));
+      powerUp("slash", (mult, grade) => {
+        music.sfx("slash");
+        const crit = Math.random() < (grade === "perfect" ? 0.3 : 0.15);
+        const dmg = Math.max(1, Math.round((state.giantSword ? randi(12, 18) : randi(8, 12)) * mult)) * (crit ? 2 : 1);
+        add([rect(state.giantSword ? 70 : 40, state.giantSword ? 5 : 3), pos(W / 2, BY), anchor("center"), color(244, 241, 234), rotate(-40), z(40), opacity(1), lifespan(0.15)]);
+        const verb = state.giantSword ? (crit ? "swung the GIANT SWORD in a huge arc!" : "swung the GIANT SWORD!") : (crit ? "did a HUGE spinning slash!" : "slashed with the sword!");
+        hitBoss(dmg, verb + (grade === "perfect" ? " PERFECT!" : ""));
+      });
     } else if (o === "Run") {
       say(["* You tried to run.", `* Then you remembered ${state.sis} and ${state.bro}. You did not run.`], enemyTurn);
     }
@@ -1044,23 +1270,77 @@ scene("battle", (which) => {
     add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.5), z(50), lifespan(0.08)]);
     bossSpr.pos.x = W / 2 + 6;
     wait(0.08, () => bossSpr.pos.x = W / 2);
-    add([text(`${dmg}`, { size: 14 }), pos(W / 2 + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), lifespan(0.8), move(UP, 30)]);
+    add([text(`${dmg}`, { size: 14 }), pos(W / 2 + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), opacity(1), lifespan(0.8), move(UP, 30)]);
     const lines = [`* ${state.name} ${verb} ${dmg} damage to ${boss.name}!`];
     if (boss.hp <= 0) { music.sfx("win"); say(lines.concat(def.win).concat(def.small ? ["* You feel a little stronger. +12 HP, +8 PP" + (state.cave % 2 === 1 ? ", and you found a Cookie!" : "!")] : []), def.next); }
     else say(lines, enemyTurn);
   }
 
+  // which defense the enemy's tuning calls for this turn
+  function pickDefense() {
+    if (mini.pick === "phase" && mini.phases) {
+      const f = boss.hp / boss.maxHp;
+      return mini.phases.find((p) => f > p.above) || mini.phases[mini.phases.length - 1];
+    }
+    const list = mini.defend || ["block"];
+    const name = mini.pick === "cycle" ? list[defTurn % list.length] : mini.pick === "random" ? choose(list) : list[0];
+    return { defend: name, fakeouts: mini.fakeouts || 0 };
+  }
+  // a short warning in the track strip, then the defense begins
+  function telegraph(txt, then) {
+    const p = add([text(txt, { size: 12 }), pos(W / 2, 163), anchor("center"), color(...C_RED), z(30)]);
+    wait(0.5, () => { destroy(p); then(); });
+  }
+  // the enemy's turn minigame: the rolled damage goes in; what lands comes out, never below 30% of the roll
+  function defend(rolled, done) {
+    const d = pickDefense(); defTurn += 1;
+    const speed = mini.speed || 1;
+    const land = (cut) => {
+      let final = rolled;
+      if (cut < 0) final = Math.round(rolled * (1 - cut));
+      else if (cut > 0) final = Math.max(Math.ceil(rolled * 0.3), Math.round(rolled * (1 - cut)));
+      done(Math.max(1, final));
+    };
+    if (d.defend === "mashB") {
+      telegraph(d.flurry ? "A FLURRY!!" : `${boss.name} ATTACKS!`, () =>
+        miniMash({ prompt: d.flurry ? "FLURRY! MASH B!" : "MASH B!", keys: BACK, duration: 1.5, speed, hot: C_TEAL, flurry: d.flurry }, (r) => land(0.6 * r)));
+    } else if (d.defend === "wait") {
+      miniWait({ speed, fakeouts: d.fakeouts || 0, spr: bossSpr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0));
+    } else {
+      telegraph(`${boss.name} ATTACKS!`, () =>
+        miniTiming({ prompt: "BLOCK! TAP B!", keys: BACK, speed, zone: mini.zone || 0.3, hot: C_TEAL }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0)));
+    }
+  }
+
   function enemyTurn() {
     if (boss.frozen > 0) { boss.frozen -= 1; say([`* ${boss.name} is frozen and can't move!`], () => busy = false); return; }
-    const a = choose(def.attacks);
-    const dmg = a.d[1] === 0 ? 0 : randi(a.d[0], a.d[1]);
-    const line = `* ${boss.name} ${a.t.replace("%n", state.name)}` + (dmg > 0 ? ` ${dmg} damage to ${state.name}!` : " Nothing happened.");
-    if (dmg > 0) { state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); music.sfx("hurt"); }
-    if (state.hp <= 0) {
-      music.sfx("lose");
-      say([line, `* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."],
-        () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true }); });
-    } else say([line], () => busy = false);
+    const swings = mini.double && Math.random() < mini.double ? 2 : 1;
+    const lines = [];
+    function next(i) {
+      if (i >= swings) { say(lines, () => busy = false); return; }
+      const a = choose(def.attacks);
+      const rolled = a.d[1] === 0 ? 0 : randi(a.d[0], a.d[1]);
+      const head = `* ${boss.name} ${a.t.replace("%n", state.name)}`;
+      if (rolled === 0) { lines.push(head + " Nothing happened."); next(i + 1); return; }
+      defend(rolled, (dmg) => {
+        state.hp = Math.max(0, state.hp - dmg); shake(dmg > 6 ? 14 : 8); music.sfx("hurt");
+        add([text(`-${dmg}`, { size: 14 }), pos(65, PY - 6), anchor("center"), color(...C_RED), z(45), opacity(1), lifespan(0.8, { fade: 0.3 }), move(UP, 30)]);
+        const note = dmg < rolled ? ` (You blocked ${rolled - dmg}!)` : dmg > rolled ? ` (You flinched! +${dmg - rolled})` : "";
+        lines.push(`${head} ${dmg} damage to ${state.name}!${note}`);
+        if (state.hp <= 0) {
+          music.sfx("lose");
+          say(lines.concat([`* ${state.name} got knocked flat.`, "* ...", `* Mom's voice: "${state.name}! Get UP!"`, "* You got up. You still have a job to do."]),
+            () => { state.hp = state.maxHp; state.pp = state.maxPp; state.cookies = Math.max(state.cookies, 2); state.juice = Math.max(state.juice, 1); go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true }); });
+          return;
+        }
+        next(i + 1);
+      });
+    }
+    if (swings === 2) {
+      const p = add([text("DOUBLE ATTACK!", { size: 14 }), pos(W / 2, 163), anchor("center"), color(...C_RED), z(30)]);
+      shake(6); music.sfx("bang");
+      wait(0.7, () => { destroy(p); next(0); });
+    } else next(0);
   }
 
   wait(0.2, () => say(def.intro, () => busy = false));
