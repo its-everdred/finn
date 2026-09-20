@@ -32,6 +32,8 @@ const START = {
   beatLygon: false, hollow: 0, beatMalva: false,
   // after Lygon: the walk home, the trouble next door, the King, the friends
   homeAgain: false, kingFled: false, friends: false, partyHp: {}, rockets: 3,
+  // the pantry, and the summit after the Hollow: Yugrin runs off with the orb
+  soda: 2, bombs: 0, yugrinHasOrb: false, beatYugrin: false,
 };
 const state = { name: "Finn", sis: "Lily", bro: "Max", dog: "Biscuit", maxHp: 40, maxPp: 30, ...START };
 
@@ -45,7 +47,7 @@ function loadSave() {
 }
 // Old saves keep working across updates: fill in any field a newer build added,
 // keep the player's names and progress, and fall back to a scene that still exists.
-const SCENES = ["upstairs", "downstairs", "town", "cave", "town2", "hollow", "house2", "road"];
+const SCENES = ["upstairs", "downstairs", "town", "cave", "town2", "hollow", "house2", "road", "summit"];
 const PARTY_NAMES = ["sis", "bro", "pip", "zed", "bruno", "bloop"];
 function migrate(saved) {
   const st = { ...START, name: state.name, sis: state.sis, bro: state.bro, dog: state.dog, maxHp: state.maxHp, maxPp: state.maxPp, ...(saved.state || {}) };
@@ -58,6 +60,8 @@ function migrate(saved) {
   st.party = Array.isArray(st.party) ? st.party.filter((n) => PARTY_NAMES.includes(n)) : [];
   st.partyHp = st.partyHp && typeof st.partyHp === "object" ? { ...st.partyHp } : {};
   st.rockets = Math.max(0, st.rockets | 0);
+  st.soda = Math.max(0, st.soda | 0); st.bombs = Math.max(0, st.bombs | 0);
+  st.yugrinHasOrb = !!st.yugrinHasOrb && st.beatMalva; st.beatYugrin = !!st.beatYugrin && st.beatMalva;
   // a save from before the King: in that build the family was already home after Lygon
   if (st.beatLygon && !("homeAgain" in (saved.state || {}))) st.homeAgain = true;
   // the flags only ever go forward in this order
@@ -69,6 +73,7 @@ function migrate(saved) {
   // the east town, the road and the Hollow only exist once Lygon is beaten
   if ((scene === "town2" || scene === "hollow" || scene === "road") && !st.beatLygon) scene = "town";
   if (scene === "house2" && !st.homeAgain) scene = "town";
+  if (scene === "summit" && !st.beatMalva) scene = st.beatLygon ? "hollow" : "town";
   if (!SCENES.includes(scene)) scene = st.kidnapped ? "town" : "upstairs";
   return { scene, state: st };
 }
@@ -133,17 +138,24 @@ function openMenu() {
       if (heal <= 0) return flash("HP is already full.");
       state.cookies -= 1; state.hp += heal; music.sfx("heal"); flash(`+${heal} HP. Mmm.`);
     } },
-    { label: `Juice   x${state.juice}   (full HP)`, use: () => {
+    { label: `Juice   x${state.juice}   (full HP+PP)`, use: () => {
       if (state.juice <= 0) return flash("No juice left!");
-      const heal = state.maxHp - state.hp;
-      if (heal <= 0) return flash("HP is already full.");
-      state.juice -= 1; state.hp = state.maxHp; music.sfx("heal"); flash(`+${heal} HP. Full health!`);
+      const heal = state.maxHp - state.hp, pp = state.maxPp - state.pp;
+      if (heal <= 0 && pp <= 0) return flash("Everything is already full.");
+      state.juice -= 1; state.hp = state.maxHp; state.pp = state.maxPp; music.sfx("heal"); flash(`+${heal} HP, +${pp} PP! Everything's full!`);
+    } },
+    { label: `Soda    x${state.soda}   (+12 PP)`, use: () => {
+      if (state.soda <= 0) return flash("No soda left!");
+      const pp = Math.min(state.maxPp - state.pp, 12);
+      if (pp <= 0) return flash("PP is already full.");
+      state.soda -= 1; state.pp += pp; music.sfx("heal"); flash(`+${pp} PP. Fizzy.`);
     } },
     { label: "Close", use: close },
   ];
+  const N = rows().length;
   add([rect(W - 16, 76, { radius: 3 }), pos(8, H - 84), color(20, 20, 36), outline(2, rgb(232, 232, 240)), fixed(), z(100), "menu"]);
   const head = add([text("", { size: 8 }), pos(18, H - 76), color(242, 208, 92), fixed(), z(101), "menu"]);
-  const lines = [0, 1, 2].map((i) => add([text("", { size: 8 }), pos(30, H - 62 + i * 13), color(232, 232, 240), fixed(), z(101), "menu"]));
+  const lines = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(30, H - 62 + i * 13), color(232, 232, 240), fixed(), z(101), "menu"]));
   const cur = add([text(">", { size: 8 }), pos(18, H - 62), color(242, 208, 92), fixed(), z(101), "menu"]);
   const note = add([text("", { size: 8 }), pos(W - 18, H - 76), anchor("topright"), color(207, 207, 216), fixed(), z(101), "menu"]);
   let noteUntil = 0;
@@ -155,8 +167,8 @@ function openMenu() {
     if (time() > noteUntil) note.text = "";
   });
   const hs = [];
-  ["up", "w", "8"].forEach((k) => hs.push(onKeyPress(k, () => { idx = (idx + 2) % 3; music.sfx("move"); })));
-  ["down", "s", "2"].forEach((k) => hs.push(onKeyPress(k, () => { idx = (idx + 1) % 3; music.sfx("move"); })));
+  ["up", "w", "8"].forEach((k) => hs.push(onKeyPress(k, () => { idx = (idx + N - 1) % N; music.sfx("move"); })));
+  ["down", "s", "2"].forEach((k) => hs.push(onKeyPress(k, () => { idx = (idx + 1) % N; music.sfx("move"); })));
   INTERACT.forEach((k) => hs.push(onKeyPress(k, () => rows()[idx].use())));
   BACK.forEach((k) => hs.push(onKeyPress(k, close)));
   function close() {
@@ -663,8 +675,8 @@ scene("downstairs", (opts) => {
         "Mom: A CLOWN. A clown came through the door. Our DOOR.",
         "Mom: ...You have a sword. Why do you have a sword. Where did you get a sword.",
         `Mom: No. No time. Go. GO. Bring them home, ${state.name}.`,
-        "Mom: Take these. Cookies heal you. Juice heals you all the way.",
-        "* You got 3 Cookies and a Juice Box!",
+        "Mom: Take these. Cookies heal you. Soda is for your PSI. Juice fills up everything.",
+        "* You got 3 Cookies, 2 Sodas and a Juice Box!",
       ]);
       return;
     }
@@ -803,7 +815,11 @@ scene("town", (opts) => {
   const player = makePlayer(opts.from === "east" ? W - 34 : opts.from === "home" ? 20 + 12 : opts.from === "trouble" ? W - 66 + 12 : W / 2 - 11,
     opts.from === "home" || opts.from === "trouble" ? 62 : H - 44);
   makeFollowers(player);
-  player.onCollide("east", () => { if (!dialogOpen) go("road", { from: "west" }); });
+  player.onCollide("east", () => {
+    if (dialogOpen) return;
+    if (!state.friends) { player.pos.x -= 8; say(["* A voice from inside: 'Not alone. Never alone.' The way is shut."]); return; }
+    go("road", { from: "west" });
+  });
   // the road east is closed until the King has gone that way
   if (state.beatLygon && !state.kingFled) {
     add([rect(4, 34), pos(W - 10, H - 48), area(), opacity(0), "eastlocked"]);
@@ -1482,6 +1498,8 @@ scene("town2", (opts) => {
   player.onCollide("west", () => { if (!dialogOpen) go("road", { from: "east" }); });
   player.onCollide("hollowzone", () => {
     if (dialogOpen) return;
+    // nobody goes in alone: the man must be saved and the friends met first
+    if (!state.friends) { player.pos.y += 10; say(["* A voice from inside: 'Not alone. Never alone.' The way is shut."]); return; }
     if (state.hollow === 0) {
       say(["* A door in the rock. Purple light leaks around the edges like it can't quite be held in.", "* From inside: wingbeats. Heavy footsteps. And something humming, low and pleased.", "* You went in."], () => go("hollow"));
     } else go("hollow");
@@ -1681,6 +1699,13 @@ scene("hollow", (opts) => {
     const mv = add([sprite("malva"), pos(BOSS.x, BOSS.y), anchor("center"), z(5), area({ shape: new Rect(vec2(0, 0), 48, 56) }), "malvazone"]);
     mv.onUpdate(() => { mv.pos.y = BOSS.y + Math.sin(time() * 1.5) * 1.5; });
     player.onCollide("malvazone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.malva.meet, () => go("battle", "malva")); });
+  } else {
+    // her chair is empty; behind it the rock has opened onto the mountain
+    add([rect(44, 30), pos(BOSS.x - 22, BOSS.y - 6), color(28, 18, 44), z(3)]); add([rect(48, 6), pos(BOSS.x - 24, BOSS.y + 22), color(22, 14, 36), z(3)]);
+    add([rect(40, 30), pos(BOSS.x - 20, 0), color(199, 123, 214), opacity(0.35), z(3)]);
+    add([text("^", { size: 8 }), pos(BOSS.x, 34), anchor("center"), color(242, 208, 92), z(3)]);
+    add([rect(40, 12), pos(BOSS.x - 20, 24), area(), "hsummit"]);
+    player.onCollide("hsummit", () => { if (!dialogOpen) go("summit"); });
   }
 
   // the bottom of the hall is the way out, back to the east town
@@ -1692,7 +1717,55 @@ scene("hollow", (opts) => {
   wait(0.3, () => say(state.hollow === 0
     ? ["* Black stone. Purple light from somewhere far above. Chains, swaying with no wind.", "* Wingbeats, high up. Footsteps, close. Six shapes with purple eyes, and every one of them used to be somebody."]
     : left > 0 ? [`* ${left} of hers left. The seal at the top is still humming.`]
+    : state.beatMalva ? ["* The Hollow is dark and quiet. At the top, where her chair was, the rock is open to the sky.", "* Yugrin went that way. EAST, up the mountain."]
     : ["* The seal is gone. At the top of the hall, something purple is pulsing like a heartbeat.", "* She's up there. So is the orb."]));
+});
+
+// ---------------------------------------------------------------- scene: the summit
+// One screen of bare mountain above the Hollow. Yugrin stands at the top with the orb on his staff.
+
+scene("summit", (opts) => {
+  opts = opts || {};
+  resetCam();
+  save("summit");
+  music.play("summit");
+  window.__frozen = false;
+  // purple sky, a far ridge, the stone shelf you stand on, and the cliff edge along its bottom
+  add([rect(W, H), pos(0, 0), color(34, 14, 54)]);
+  for (let i = 0; i < 50; i++) add([rect(1, 1), pos(rand(0, W), rand(0, 90)), color(232, 232, 240), opacity(rand(0.3, 0.9))]);
+  [[40, 30], [150, 22], [250, 34]].forEach(([x, w], i) => {
+    const b = add([rect(w, 120), pos(x, 0), color(199, 123, 214), opacity(0.08), z(0)]);
+    b.onUpdate(() => { b.opacity = 0.04 + 0.06 * Math.abs(Math.sin(time() * 0.8 + i)); });
+  });
+  for (let x = -20; x < W; x += 60) add([circle(40), pos(x + 30, 118), color(20, 8, 34), z(0)]);
+  add([rect(W, 130), pos(0, 110), color(56, 50, 66), z(1)]);
+  for (let i = 0; i < 160; i++) add([rect(rand(2, 5), rand(1, 2)), pos(rand(0, W), rand(112, H)), color(...(Math.random() < 0.5 ? [44, 38, 54] : [70, 64, 82])), z(1)]);
+  // the cliff edge: the shelf drops off along the bottom, except for the path back down
+  add([rect(W, 6), pos(0, H - 26), color(30, 26, 40), z(2)]);
+  for (let x = 0; x < W; x += 14) add([rect(8, 3), pos(x + 3, H - 24), color(20, 16, 30), z(2)]);
+  wall(0, 0, W, 112); wall(0, 0, 6, H); wall(W - 6, 0, 6, H);
+  wall(0, H - 26, W / 2 - 24, 26); wall(W / 2 + 24, H - 26, W / 2 - 24, 26);
+  add([rect(48, 26), pos(W / 2 - 24, H - 26), color(70, 64, 82), z(2)]);
+  add([text("v", { size: 8 }), pos(W / 2, H - 14), anchor("center"), color(242, 208, 92), z(3)]);
+  add([rect(48, 6), pos(W / 2 - 24, H - 6), area(), "down"]);
+  [[30, 150], [270, 130], [60, 200], [250, 196]].forEach(([x, y]) => { add([sprite("rock"), pos(x, y), anchor("topleft"), z(3 + y / 1000)]); wall(x + 2, y + 8, 14, 5); });
+
+  const player = makePlayer(W / 2 - 11, opts.retry ? H - 80 : H - 62);
+  makeFollowers(player);
+  wireTalk(player); wireMenu(); hud();
+  player.onCollide("down", () => { if (!dialogOpen) go("hollow", { resume: true, boss: true }); });
+
+  if (!state.beatYugrin) {
+    // YUGRIN, at the top, the orb burning on his staff
+    const yx = W / 2, yy = 126;
+    const glow = add([circle(16), pos(yx + 20, yy - 18), color(199, 123, 214), opacity(0.3), z(4)]);
+    const orb = add([sprite("orb"), pos(yx + 20, yy - 18), anchor("center"), scale(0.7), z(6), "orb"]);
+    orb.onUpdate(() => { orb.angle = Math.sin(time() * 0.8) * 10; glow.opacity = 0.2 + 0.15 * Math.abs(Math.sin(time() * 2.5)); });
+    const y = add([sprite("minion"), pos(yx, yy), anchor("center"), z(5), area({ shape: new Rect(vec2(0, 0), 44, 56) }), "yugrinzone"]);
+    y.onUpdate(() => { y.pos.y = yy + Math.sin(time() * 1.5) * 1.5; });
+    player.onCollide("yugrinzone", () => { if (dialogOpen) return; player.pos.y += 12; say(ENEMIES.yugrin.meet, () => go("battle", "yugrin")); });
+  }
+  wait(0.3, () => say(opts.retry ? ["* You got up. He is still up there. So is the orb."] : ["* The top of the mountain. Wind, stars, and purple light.", "* Yugrin is standing at the summit. The orb is burning on his staff."]));
 });
 
 
@@ -1985,8 +2058,8 @@ const ENEMIES = {
       { t: "stomped its little yellow feet!", d: [3, 6] },
       { t: "tried to look scary.", d: [0, 0] },
     ],
-    win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open."],
-    next: () => { state.beatBugon = true; fullHeal(); go("cave", { resume: true }); },
+    win: ["* BUGON flopped over and went 'flap'.", "* It scurried off, ears drooping. The inner door creaks open.", "* Something rolled out of Bugon's ear. A BOMB!"],
+    next: () => { state.beatBugon = true; state.bombs += 1; fullHeal(); go("cave", { resume: true }); },
     mini: { attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, defend: ["mashB", "block", "wait"], pick: "random", speed: 1.2, zone: 0.28, fakeouts: 1, double: 0.3 },
   },
   lygon: {
@@ -2099,7 +2172,7 @@ const ENEMIES = {
     mini: { attack: "mash", defend: ["block"], speed: 1.1, zone: 0.3 },
   },
   malva: {
-    name: "MALAGORE", spr: "malva", hp: 140, weak: "fire", bg: [16, 4, 30], band: [40, 12, 66], zone: "hollow", scale: 1.6,
+    name: "MALAGORE", spr: "malva", hp: 220, weak: "fire", bg: [16, 4, 30], band: [40, 12, 66], zone: "hollow", scale: 1.6,
     meet: ["* A tall figure in a black cloak sits on a stone chair. Above her, an ORB hangs in the air, glowing purple.", "* Inside the orb: your house. Your street. Your MOM, looking out the window.", "MALAGORE: Finally. Come closer. I like to see faces.", "* You drew the sword."],
     intro: ["MALAGORE: I have watched you since the storm, little one. Through the orb. Every step.", "MALAGORE: The clown was a toy. The townsfolk were toys. YOU are the one I wanted.", "* MALAGORE rose from her chair! The orb burned brighter!"],
     attacks: [
@@ -2108,20 +2181,44 @@ const ENEMIES = {
       { t: "whispered. The chains lashed at %n!", d: [5, 8] },
       { t: "laughed. The orb showed %n falling.", d: [3, 6] },
     ],
-    win: [
-      "MALAGORE: No... NO. I SAW this. I saw you FALL...",
-      "* The orb cracked.",
-      "* ...and shattered. Light poured out.",
-      "* Every purple thing in the Hollow went out at once, like a blown candle.",
-      "* MALAGORE's cloak folded to the floor, empty.",
-    ],
-    next: () => { state.beatMalva = true; go("end"); },
+    // she is never beaten by the party: the last blow is Yugrin's (see malvaTheft in the battle scene)
+    win: ["* MALAGORE is defeated."],
+    next: () => { state.beatMalva = true; go("summit"); },
     mini: {
-      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.4, zone: 0.24, pick: "phase",
+      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.24, pick: "phase",
+      // five forms; each one is a sprite, a speed, and its own defenses. The hit that crosses a line plays the swap.
       phases: [
-        { above: 0.66, defend: "block", zones: 2 },
-        { above: 0.33, defend: "wait", fakeouts: 3 },
-        { above: 0, defend: "mashB", flurry: true, double: 1, banner: "THE ORB FLARES!!" },
+        { above: 0.8, spr: "malva", defend: "block", zones: 2, speed: 1.3 },
+        { above: 0.6, spr: "malagore2", defend: ["wait", "block"], fakeouts: 2, zones: 2, speed: 1.3, enter: ["* The crown falls off! MALAGORE: You want to see me? SEE ME."],
+          attacks: [{ t: "lashed %n with a nose tentacle!", d: [6, 10] }, { t: "wrapped two nose tentacles around %n and squeezed!", d: [5, 9] }, { t: "hissed through every tentacle at once!", d: [4, 7] }] },
+        { above: 0.4, spr: "malagore3", defend: "mashB", double: 0.5, speed: 1.4, enter: ["* MALAGORE is falling apart!"] },
+        { above: 0.2, spr: "malagore4", defend: ["wait", "block"], fakeouts: 3, zones: 2, zone: 0.15, speed: 1.4, enter: ["* MALAGORE is becoming a SPIRIT!"],
+          attacks: [{ t: "swept straight through %n! The cold went right to the bones!", d: [6, 10] }, { t: "passed through %n like a draft under a door!", d: [5, 8] }, { t: "howled. The orb howled with her.", d: [4, 7] }] },
+        { above: 0, spr: "malagore5", defend: ["mashB", "block"], flurry: "alt", double: 0.5, zones: 2, speed: 1.5, enter: ["MALAGORE: Enough. Face me as I AM."], banner: "THE ORB FLARES!!" },
+      ],
+    },
+  },
+  // -------- the summit. Yugrin, her knight, with the stolen orb on his staff. The last fight.
+  yugrin: {
+    name: "YUGRIN", spr: "minion", hp: 260, weak: null, bg: [24, 10, 40], band: [60, 30, 86], zone: "summit", scale: 1.6,
+    meet: ["* The horned knight turns around. The orb on his staff throws purple light over the whole summit.", "YUGRIN: She watched. I WAITED. And now the orb is mine.", `YUGRIN: Come, then, ${state.name}. Let us see what she saw in you.`],
+    intro: ["* YUGRIN raised the giant sword!", "* The orb on his staff burned brighter!"],
+    attacks: [
+      { t: "swung the giant sword at %n!", d: [6, 10] },
+      { t: "brought the sword down on %n! The mountain rang!", d: [7, 11] },
+      { t: "pointed the staff. The orb spat purple fire at %n!", d: [6, 10] },
+      { t: "laughed behind the helmet.", d: [0, 0] },
+    ],
+    win: ["* YUGRIN dropped the staff.", "YUGRIN: ...no. NO. It was MINE. It was supposed to be MINE."],
+    next: () => { window.rbOrbShatter && window.rbOrbShatter(() => { state.beatYugrin = true; save("summit"); go("end"); }); },
+    mini: {
+      attack: { slash: "mash", fire: "timing", ice: "timing", star: "sequence" }, speed: 1.3, zone: 0.24, pick: "phase",
+      phases: [
+        { above: 0.66, tier: 1, defend: "wait", fakeouts: 1, speed: 1.3 },
+        { above: 0.33, tier: 2, defend: "block", zones: 2, double: 0.34, speed: 1.4, enter: ["YUGRIN: The orb... it BURNS."], banner: "THE ORB RAKES THE SKY!",
+          attacks: [{ t: "raked the summit with a beam from the orb! %n was in it!", d: [7, 11] }, { t: "swung the sword through the beam at %n!", d: [6, 10] }, { t: "made the orb scream at %n!", d: [5, 9] }] },
+        { above: 0, tier: 3, defend: "mashB", flurry: true, speed: 1.5, enter: ["YUGRIN: I AM THE ORB NOW."],
+          attacks: [{ t: "cracked the sky open over %n!", d: [8, 12] }, { t: "called lightning down on %n!", d: [7, 11] }, { t: "swung the sword and the orb together at %n!", d: [7, 11] }] },
       ],
     },
   },
@@ -2423,17 +2520,18 @@ scene("battle", (which, bopts = {}) => {
   }
   buildMembers();
   // three or more fighters make her people, the house pair and the road's strays tougher. The cave stays as it was.
-  const hpScale = zone !== "cave" && (members.length >= 3 || which === "house2") ? 1.35 : 1;
-  const dmgScale = () => (zone !== "cave" && members.length >= 3 ? 1.2 : 1);
+  // five fighters (the hero, Pip, Zed, Bruno and Bloop) make them tougher still
+  const hpScale = zone === "cave" ? 1 : members.length >= 5 ? 1.6 : (members.length >= 3 || which === "house2") ? 1.35 : 1;
+  const dmgScale = () => (zone === "cave" ? 1 : members.length >= 5 ? 1.3 : members.length >= 3 ? 1.2 : 1);
 
   // ---- the enemies
   const BY = 80; // they stand a little high so the minigame strip fits under their HP bars
   const foes = defs.map((d, i) => ({ def: d, name: d.name, hp: Math.round(d.hp * hpScale), maxHp: Math.round(d.hp * hpScale), frozen: 0, alive: true, defTurn: 0,
-    mini: d.mini || { attack: "timing", defend: ["block"] }, x: defs.length === 1 ? W / 2 : W / 2 - 64 + i * 128 }));
+    mini: d.mini || { attack: "timing", defend: ["block"] }, x: defs.length === 1 ? W / 2 : W / 2 - 64 + i * 128, phaseIdx: 0 }));
   let busy = true, cur = null, actor = 0, targeting = null, defending = null, pending = null;
   let menu = 0, sub = null, subIdx = 0, targetIdx = 0, allyIdx = 0;
   // read-only view of the fight for tests and tinkering
-  window.rbBattle = { which, foes, members, hpScale, get dmgScale() { return dmgScale(); }, lastRoll: null, lastTarget: null, get cur() { return cur && cur.name; }, get busy() { return busy; }, get sub() { return sub; }, get targeting() { return targeting && targeting.name; } };
+  window.rbBattle = { which, foes, members, hpScale, get dmgScale() { return dmgScale(); }, lastRoll: null, lastTarget: null, fxSeen: {}, events: [], get cur() { return cur && cur.name; }, get busy() { return busy; }, get sub() { return sub; }, get targeting() { return targeting && targeting.name; } };
   let barged = state.friends || which !== "house2";
 
   add([rect(W, H), pos(0, 0), color(...lead.bg)]);
@@ -2453,7 +2551,7 @@ scene("battle", (which, bopts = {}) => {
     const bw = defs.length === 1 ? 100 : 90;
     add([rect(bw, 6), pos(f.x - bw / 2, 146), color(20, 20, 36), outline(1, rgb(232, 232, 240)), z(20)]);
     const bar = add([rect(bw, 6), pos(f.x - bw / 2, 146), color(224, 69, 63), z(21), "foebar"]);
-    bar.onUpdate(() => { bar.width = bw * Math.max(0, f.hp) / f.maxHp; });
+    bar.onUpdate(() => { bar.width = bw * Math.max(0, f.hp) / f.maxHp; bar.pos.x = f.x - bw / 2 + (f.barShake ? rand(-2, 2) : 0); });
     add([text(f.name, { size: 8 }), pos(f.x, 136), anchor("center"), color(232, 232, 240), z(21), "foename"]);
   });
   // MALAGORE sits under the ORB: it hangs behind her, spinning slowly, pulsing purple, and burns at low HP
@@ -2470,6 +2568,13 @@ scene("battle", (which, bopts = {}) => {
       oglow.radius = 26 + 6 * Math.abs(Math.sin(t * 2.5));
     });
     loop(0.25, () => add([rect(2, 2), pos(W / 2 + rand(-16, 16), BY - 50), color(199, 123, 214), z(4), opacity(0.9), lifespan(0.8, { fade: 0.5 }), move(UP, rand(10, 26))]));
+  }
+  // YUGRIN carries the orb on his staff
+  if (which === "yugrin") {
+    music.play("final");
+    const oglow = add([circle(14), pos(W / 2 + 34, BY - 30), color(199, 123, 214), opacity(0.3), z(3), "orbglow"]);
+    const orb = add([sprite("orb"), pos(W / 2 + 34, BY - 30), anchor("center"), scale(0.8), rotate(0), z(6), "orb"]);
+    orb.onUpdate(() => { const t = time(); orb.angle = Math.sin(t * 1.2) * 10; oglow.opacity = 0.2 + 0.15 * Math.abs(Math.sin(t * 3)); oglow.radius = 12 + 4 * Math.abs(Math.sin(t * 2.5)); });
   }
   // captive siblings in the circus fight
   if (which === "lygon") {
@@ -2526,7 +2631,7 @@ scene("battle", (which, bopts = {}) => {
 
   // ---- the menu
   const menuBox = add([rect(180, 46, { radius: 3 }), pos(130, PY), color(20, 20, 36), outline(2, rgb(232, 232, 240)), z(20)]);
-  const slots = [0, 1, 2, 3].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
+  const slots = [0, 1, 2, 3, 4, 5].map((i) => add([text("", { size: 8 }), pos(146 + (i % 2) * 80, PY + 10 + Math.floor(i / 2) * 16), color(232, 232, 240), z(21)]));
   const cursor = add([text(">", { size: 8 }), pos(0, 0), color(242, 208, 92), z(22)]);
   const who = add([text("", { size: 8 }), pos(130, PY - 10), color(232, 232, 240), z(22)]);
   const hint = add([text("", { size: 8 }), pos(310, PY - 10), anchor("topright"), color(207, 207, 216), z(22)]);
@@ -2543,7 +2648,7 @@ scene("battle", (which, bopts = {}) => {
   }
   function labels() {
     if (sub === "psi") return PSI.map((p) => `${p.name} ${p.pp}`).concat(["Back"]);
-    if (sub === "item") return [`Cookie x${state.cookies}`, `Juice x${state.juice}`, "Back", ""];
+    if (sub === "item") return [`Cookie ${state.cookies}`, `Juice ${state.juice}`, `Soda ${state.soda}`, `Bomb ${state.bombs}`, "Back"];
     if (sub === "target") return [`Hit who?  < ${foes[targetIdx].name} >`, "", "", ""];
     if (sub === "ally") return [`Heal who?  < ${members[allyIdx].label} >`, "", "", ""];
     return options().map((o) => (o === "Rocket" ? `Rocket x${state.rockets}` : o));
@@ -2551,15 +2656,15 @@ scene("battle", (which, bopts = {}) => {
   onUpdate(() => {
     const hide = busy || dialogOpen;
     menuBox.hidden = hide; cursor.hidden = hide;
-    const L = labels();
-    slots.forEach((s, i) => { s.hidden = hide; s.text = L[i] || ""; s.color = rgb(232, 232, 240); });
+    const L = labels(), cols = L.length > 4 ? 3 : 2;
+    slots.forEach((s, i) => { s.hidden = hide; s.text = L[i] || ""; s.color = rgb(232, 232, 240); s.pos = vec2(cols === 3 ? 140 + (i % 3) * 58 : 146 + (i % 2) * 80, PY + 10 + Math.floor(i / cols) * 16); });
     if (cur && cur.name === "bloop" && !sub) { slots[2].text = "(Bloop has no other ideas.)"; slots[2].color = rgb(...C_GREY); }
     cursor.pos = slots[sub === "target" || sub === "ally" ? 0 : sub ? subIdx : menu].pos.add(-9, 0);
     const live = foes.filter((f) => f.alive), tune = live[0] || foes[0];
     who.hidden = hide || (sub && sub !== "target" && sub !== "ally");
     who.text = cur ? `${cur.label}  HP ${mhp(cur)}/${mmax(cur)}` + (cur.name === "hero" ? `  PP ${state.pp}/${state.maxPp}` : cur.focus ? "  FOCUSED" : "") : "";
     hint.hidden = hide || !sub || sub === "target" || sub === "ally";
-    hint.text = sub === "psi" ? `${tune.name} hates ${tune.def.weak.toUpperCase()}!` : sub === "item" ? "Cookie +15   Juice = full" : "";
+    hint.text = sub === "psi" ? (tune.def.weak ? `${tune.name} hates ${tune.def.weak.toUpperCase()}!` : `${tune.name} fears nothing.`) : sub === "item" ? "Cookie +15  Soda +12PP  Juice full  Bomb ALL" : "";
   });
 
   function nav(dx, dy) {
@@ -2570,12 +2675,12 @@ scene("battle", (which, bopts = {}) => {
       return;
     }
     if (sub === "ally") { if (dx) { allyIdx = (allyIdx + dx + members.length) % members.length; music.sfx("move"); } return; }
-    const L = labels().filter((x) => x);
+    const L = labels().filter((x) => x), cols = L.length > 4 ? 3 : 2;
     let idx = sub ? subIdx : menu;
-    if (dx === -1 && idx % 2 === 1) idx -= 1;
-    if (dx === 1 && idx % 2 === 0 && idx + 1 < L.length) idx += 1;
-    if (dy === -1 && idx >= 2) idx -= 2;
-    if (dy === 1 && idx + 2 < L.length) idx += 2;
+    if (dx === -1 && idx % cols > 0) idx -= 1;
+    if (dx === 1 && idx % cols < cols - 1 && idx + 1 < L.length) idx += 1;
+    if (dy === -1 && idx >= cols) idx -= cols;
+    if (dy === 1 && idx + cols < L.length) idx += cols;
     if (idx !== (sub ? subIdx : menu)) music.sfx("move");
     if (sub) subIdx = idx; else menu = idx;
   }
@@ -2678,17 +2783,35 @@ scene("battle", (which, bopts = {}) => {
       return;
     }
     if (sub === "item") {
-      if (subIdx === 2) { sub = null; subIdx = 0; music.sfx("back"); return; }
+      if (subIdx === 4) { sub = null; subIdx = 0; music.sfx("back"); return; }
       if (subIdx === 0) {
         if (state.cookies <= 0) { music.sfx("back"); say(["* No cookies left!"]); return; }
         music.sfx("heal");
         state.cookies -= 1; const was = mhp(cur); setHp(cur, was + 15);
         sub = null; menu = 0; busy = true; say([`* ${cur.label} ate a Cookie. +${mhp(cur) - was} HP!`], actionDone); return;
       }
-      if (state.juice <= 0) { music.sfx("back"); say(["* No juice left!"]); return; }
-      music.sfx("heal");
-      state.juice -= 1; const was = mhp(cur); setHp(cur, mmax(cur));
-      sub = null; menu = 0; busy = true; say([`* ${cur.label} drank the Juice Box. +${mhp(cur) - was} HP! Full health!`], actionDone); return;
+      if (subIdx === 1) {
+        if (state.juice <= 0) { music.sfx("back"); say(["* No juice left!"]); return; }
+        music.sfx("heal");
+        state.juice -= 1; const was = mhp(cur), pp = state.maxPp - state.pp; setHp(cur, mmax(cur)); state.pp = state.maxPp;
+        sub = null; menu = 0; busy = true; say([`* ${cur.label} drank the Juice Box. +${mhp(cur) - was} HP, +${pp} PP! Everything's full!`], actionDone); return;
+      }
+      if (subIdx === 2) {
+        if (state.soda <= 0) { music.sfx("back"); say(["* No soda left!"]); return; }
+        music.sfx("heal");
+        state.soda -= 1; const pp = Math.min(12, state.maxPp - state.pp); state.pp += pp;
+        sub = null; menu = 0; busy = true; say([`* ${cur.label} drank a Soda. +${pp} PP! Fizzy.`], actionDone); return;
+      }
+      // the BOMB: every enemy, 25-35, no minigame
+      if (state.bombs <= 0) { music.sfx("back"); say(["* No bombs left!"]); return; }
+      state.bombs -= 1; sub = null; menu = 0; busy = true;
+      const thrower = cur.label, live = foes.filter((f) => f.alive);
+      music.sfx("boom"); shake(30);
+      add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.9), z(50), lifespan(0.25, { fade: 0.2 })]);
+      add([text("KABOOM!!", { size: 24 }), pos(W / 2, BY), anchor("center"), color(...C_GOLD), z(60), opacity(1), lifespan(0.9, { fade: 0.4 }), move(UP, 16)]);
+      live.forEach((f) => { for (let i = 0; i < 14; i++) add([rect(3, 3), pos(f.x + rand(-34, 34), BY + rand(-34, 34)), color(...choose([C_GOLD, C_RED, C_INK])), z(40), opacity(1), lifespan(0.7), move(UP, rand(40, 120))]); });
+      wait(0.3, () => hit(live.map((f) => ({ foe: f, dmg: randi(25, 35) })), thrower, "threw a BOMB! KABOOM!"));
+      return;
     }
     const o = options()[menu];
     if (!o) return;
@@ -2777,6 +2900,34 @@ scene("battle", (which, bopts = {}) => {
     go(key, { resume: true });
   };
   const finish = () => (lead.next ? lead.next(bopts) : defaultNext());
+  // one roll after any won fight: at most one thing falls out of it
+  function rollDrop() {
+    const r = Math.random();
+    if (r < 0.40) { state.cookies += 1; return "Cookie"; }
+    if (r < 0.65) { state.soda += 1; return "Soda"; }
+    if (r < 0.73) { state.juice += 1; return "Juice Box"; }
+    if (r < 0.78) { state.bombs += 1; return "BOMB"; }
+    return null;
+  }
+  function phaseIndex(f) {
+    if (f.mini.pick !== "phase" || !f.mini.phases) return 0;
+    const r = f.hp / f.maxHp, i = f.mini.phases.findIndex((p) => r > p.above);
+    return i < 0 ? f.mini.phases.length - 1 : i;
+  }
+  // a boss crossing into a new phase: a white flash, the sprite swaps, one line, then (Yugrin) the tier's opening blast
+  function phaseShift(f, then) {
+    const ph = f.mini.phases[f.phaseIdx];
+    window.rbBattle.events.push({ shift: f.phaseIdx, spr: ph.spr || f.def.spr });
+    music.sfx("transform"); shake(16);
+    const wash = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(1), z(50), fixed()]);
+    wash.onUpdate(() => { wash.opacity = Math.max(0, wash.opacity - 2.2 * dt()); if (wash.opacity <= 0) destroy(wash); });
+    wait(0.15, () => {
+      if (ph.spr && f.spr.exists()) { f.spr.use(sprite(ph.spr)); f.formSpr = ph.spr; }
+      f.barShake = !!ph.tier && ph.tier >= 3;
+      const go2 = () => say(ph.enter || [`* ${f.name} changed!`], then);
+      if (ph.tier) tierFx(ph.tier, f, go2); else go2();
+    });
+  }
   function hit(hits, who, verb) {
     music.sfx("hit"); shake(8);
     add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.5), z(50), lifespan(0.08)]);
@@ -2784,6 +2935,8 @@ scene("battle", (which, bopts = {}) => {
     hits.forEach((h) => {
       const f = h.foe, dmg = Math.max(1, Math.round(h.dmg));
       f.hp -= dmg;
+      // MALAGORE is never finished by the party: below 8% the fight stops for Yugrin
+      if (which === "malva" && f.hp <= f.maxHp * 0.08) { f.hp = Math.max(1, f.hp); f.theft = true; }
       f.spr.pos.x = f.x + 6;
       wait(0.08, () => { if (f.spr.exists()) f.spr.pos.x = f.x; });
       add([text(`${dmg}`, { size: 14 }), pos(f.x + rand(-20, 20), 50), anchor("center"), color(242, 208, 92), z(45), opacity(1), lifespan(0.8), move(UP, 30)]);
@@ -2795,12 +2948,113 @@ scene("battle", (which, bopts = {}) => {
       music.sfx("win");
       const done = inHollow ? state.hollow : state.cave;
       const bonus = lead.small && !lead.next ? ["* You feel a little stronger. +12 HP, +8 PP" + (done % 2 === 1 ? ", and you found a Cookie!" : "!")] : zone === "road" ? ["* Everyone feels a little stronger. +6 HP."] : [];
+      const drop = rollDrop();
+      if (drop) bonus.push(`* You found a ${drop}!`);
       say(lines.concat(lead.win).concat(bonus), finish);
     } else {
       downed.forEach((f) => lines.push(...(f.def.down || [`* ${f.name} went down!`])));
-      say(lines, actionDone);
+      const thief = foes.find((f) => f.theft && !f.stolen);
+      if (thief) { thief.stolen = true; say(lines, () => malvaTheft(thief)); return; }
+      // a boss that crossed a phase line plays its change before the turn moves on
+      const shifts = foes.filter((f) => f.alive && phaseIndex(f) > f.phaseIdx);
+      const run = (i) => { if (i >= shifts.length) { actionDone(); return; } shifts[i].phaseIdx = phaseIndex(shifts[i]); phaseShift(shifts[i], () => run(i + 1)); };
+      say(lines, () => run(0));
     }
   }
+  // The end of MALAGORE: Yugrin stomps in, takes the orb off her, and she collapses without it.
+  // Then Pip gets everybody back on their feet, and the party heads up the mountain after him.
+  function malvaTheft(f) {
+    busy = true; targeting = null;
+    window.rbBattle.events.push({ theft: true });
+    const orb = get("orb")[0];
+    const yug = add([sprite("minion"), pos(W + 40, BY + 10), anchor("center"), scale(1.6), z(7), "yugrin"]);
+    music.sfx("stomp"); shake(14);
+    tween(W + 40, W / 2 + 92, 0.7, (x) => { yug.pos.x = x; }, easings.easeOutQuad).then(() => {
+      shake(10); music.sfx("stomp");
+      say(["YUGRIN: The orb is MINE now."], () => {
+        if (orb && orb.exists()) { const from = orb.pos.clone(), to = vec2(yug.pos.x + 24, yug.pos.y - 40); tween(0, 1, 0.5, (v) => { orb.pos = from.lerp(to, v).add(0, -Math.sin(v * Math.PI) * 30); }, easings.easeInOutQuad); }
+        destroyAll("orbglow");
+        wait(0.6, () => say(["MALAGORE: NO— the orb— without it I—"], () => {
+          // she falls
+          const s = f.spr;
+          tween(1, 0, 0.9, (v) => { if (s.exists()) { s.opacity = v; s.pos.y = BY + (1 - v) * 26; } });
+          shake(8);
+          wait(1.0, () => {
+            f.alive = false; f.hp = 0;
+            tween(yug.pos.x, -60, 0.8, (x) => { yug.pos.x = x; if (orb && orb.exists()) orb.pos.x = x + 24; }, easings.easeInQuad);
+            wait(0.9, () => {
+              destroy(yug); if (orb && orb.exists()) destroy(orb);
+              state.beatMalva = true; state.yugrinHasOrb = true;
+              say(["* MALAGORE is defeated.", "* ...but Yugrin has the orb."], () => {
+                say([(fighters().includes("pip") ? "Pip" : state.name) + ": Everyone! Potions! Drink up!"], () => {
+                  // bottles to every member, then everybody is full
+                  members.forEach((m, i) => { const b = add([rect(4, 7), pos(W / 2 + 60, BY + 20), color(...C_TEAL), z(46)]); tween(b.pos, vec2(m.cx, PY + 10), 0.4 + i * 0.08, (p) => { b.pos = p; }, easings.easeOutQuad).then(() => destroy(b)); });
+                  wait(0.8, () => {
+                    music.sfx("heal_all"); shake(6);
+                    add([rect(W, H), pos(0, 0), color(...C_GREEN), opacity(0.55), z(50), lifespan(0.5, { fade: 0.4 })]);
+                    fullHeal();
+                    members.forEach((m) => { for (let i = 0; i < 6; i++) add([rect(2, 2), pos(m.cx + rand(-8, 8), PY + rand(0, 20)), color(...C_TEAL), z(45), opacity(1), lifespan(0.6), move(UP, rand(20, 50))]); });
+                    wait(0.6, () => say(["* Everyone is back on their feet. Full HP. Full PP.", "* The party is ready. Yugrin went EAST."], () => { save("hollow"); go("summit"); }));
+                  });
+                });
+              });
+            });
+          });
+        }));
+      });
+    });
+  }
+  // YUGRIN's three tiers, each a bigger blast than the last. Everything it draws is tagged "fx".
+  function tierFx(tier, f, then) {
+    destroyAll("fx");
+    const sp = f.spr, home = vec2(f.x, BY);
+    if (tier === 1) {
+      // the giant sword: a white arc sweeping the whole screen, and a lunge at the party row
+      music.sfx("sword_arc"); shake(18);
+      const arc = add([rect(300, 8), pos(W / 2, BY + 10), anchor("center"), color(244, 241, 234), rotate(-70), z(45), opacity(0.95), "fx"]);
+      const edge = add([rect(300, 2), pos(W / 2, BY + 10), anchor("center"), color(199, 123, 214), rotate(-70), z(46), opacity(0.9), "fx"]);
+      tween(-70, 70, 0.4, (a) => { arc.angle = a; edge.angle = a; }, easings.easeInOutQuad);
+      if (sp.exists()) tween(home.y, home.y + 36, 0.2, (y) => { if (sp.exists()) sp.pos.y = y; }).then(() => tween(home.y + 36, home.y, 0.25, (y) => { if (sp.exists()) sp.pos.y = y; }));
+    } else if (tier === 2) {
+      // the orb: a flare, two purple beams raking the screen, a purple flash and a rain of shards
+      music.sfx("orb_beam"); shake(14);
+      add([circle(40), pos(f.x + 34, BY - 30), color(199, 123, 214), opacity(0.6), z(44), lifespan(0.7, { fade: 0.5 }), "fx"]);
+      add([rect(W, H), pos(0, 0), color(199, 123, 214), opacity(0.45), z(50), lifespan(0.5, { fade: 0.4 }), "fx"]);
+      [0, 1].forEach((i) => { const b = add([rect(50, H), pos(i ? W : -50, 0), color(199, 123, 214), opacity(0.6), z(45), "fx"]); tween(b.pos.x, i ? -60 : W + 10, 0.6, (x) => { b.pos.x = x; }); });
+      for (let i = 0; i < 6; i++) add([rect(3, 5), pos(rand(20, W - 20), rand(-30, 20)), color(232, 232, 240), rotate(rand(0, 90)), z(45), opacity(1), lifespan(0.7, { fade: 0.3 }), move(DOWN, rand(120, 220)), "fx"]);
+    } else {
+      // unleashed: white cracks across the sky, lightning flicker, red at the edges, the sprite swelling
+      music.sfx("crack"); shake(26);
+      for (let i = 0; i < 8; i++) add([rect(rand(80, 220), 2), pos(rand(40, W - 40), rand(10, 150)), anchor("center"), color(244, 241, 234), rotate(rand(-70, 70)), z(46), opacity(1), lifespan(0.8, { fade: 0.3 }), "fx"]);
+      const flick = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0.8), z(50), lifespan(0.8), "fx"]);
+      flick.onUpdate(() => { flick.opacity = Math.floor(time() * 24) % 3 === 0 ? 0.75 : 0.05; });
+      [[0, 0, W, 12], [0, H - 12, W, 12], [0, 0, 12, H], [W - 12, 0, 12, H]].forEach(([x, y, w, h]) => add([rect(w, h), pos(x, y), color(...C_RED), opacity(0.7), z(49), lifespan(0.8, { fade: 0.4 }), "fx"]));
+      wait(0.15, () => music.sfx("lightning"));
+      if (sp.exists()) { const s0 = sp.scale.x; tween(s0, s0 * 1.3, 0.25, (v) => { if (sp.exists()) sp.scale = vec2(v); }).then(() => tween(s0 * 1.3, s0, 0.3, (v) => { if (sp.exists()) sp.scale = vec2(v); })); }
+    }
+    const n = get("fx").length;
+    window.rbBattle.fxSeen[tier] = Math.max(window.rbBattle.fxSeen[tier] || 0, n);
+    wait(0.8, () => { destroyAll("fx"); if (sp.exists()) sp.pos = home.clone(); then(); });
+  }
+  // the orb comes off the staff, cracks, and shatters in a white-out
+  window.rbOrbShatter = (then) => {
+    busy = true;
+    const orb = get("orb")[0];
+    music.play("shatter");
+    const rise = orb && orb.exists() ? tween(orb.pos.y, BY - 60, 0.9, (y) => { orb.pos.y = y; orb.pos.x = W / 2; }, easings.easeOutQuad) : wait(0.9);
+    rise.then(() => {
+      shake(10);
+      for (let i = 0; i < 6; i++) wait(i * 0.12, () => add([rect(rand(6, 14), 1), pos(W / 2 + rand(-10, 10), BY - 60 + rand(-14, 14)), anchor("center"), color(244, 241, 234), rotate(rand(0, 180)), z(45), "shatter"]));
+      wait(0.9, () => {
+        music.sfx("shatter"); shake(30);
+        destroyAll("shatter"); if (orb && orb.exists()) destroy(orb); destroyAll("orbglow");
+        for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; add([rect(rand(4, 9), 3), pos(W / 2, BY - 60), anchor("center"), color(244, 241, 234), rotate(i * 22), z(55), opacity(1), lifespan(1.0, { fade: 0.5 }), move(vec2(Math.cos(a), Math.sin(a)), rand(120, 220)), "shard"]); }
+        const white = add([rect(W, H), pos(0, 0), color(244, 241, 234), opacity(0), z(52), fixed()]);
+        white.onUpdate(() => { white.opacity = Math.min(1, white.opacity + 2 * dt()); });
+        wait(1.1, () => say(["* The orb is gone. Light poured out over the mountain."], then));
+      });
+    });
+  };
   const hitBoss = (dmg, verb) => hit([{ foe: tune(), dmg }], state.name, verb); // kept for anything that still calls it
 
   // ---- the enemies' turns
@@ -2811,7 +3065,12 @@ scene("battle", (which, bopts = {}) => {
   }
   function pickDefense(f) {
     const ph = currentPhase(f);
-    if (ph) return ph;
+    if (ph) {
+      const d = { ...ph };
+      if (Array.isArray(d.defend)) d.defend = d.defend[f.defTurn % d.defend.length];
+      if (d.flurry === "alt") d.flurry = f.defTurn % 2 === 0;
+      return d;
+    }
     const list = f.mini.defend || ["block"];
     const name = f.mini.pick === "cycle" ? list[f.defTurn % list.length] : f.mini.pick === "random" ? choose(list) : list[0];
     return { defend: name, fakeouts: f.mini.fakeouts || 0, zones: f.mini.blockZones || 1 };
@@ -2834,7 +3093,11 @@ scene("battle", (which, bopts = {}) => {
   // the target's defense minigame: the rolled damage goes in; what lands comes out, never below 30% of the roll
   function defend(f, rolled, done) {
     const d = pickDefense(f); f.defTurn += 1;
-    const speed = f.mini.speed || 1;
+    const speed = d.speed || f.mini.speed || 1;
+    if (d.tier) { tierFx(d.tier, f, () => defend2(f, rolled, done, d, speed)); return; }
+    defend2(f, rolled, done, d, speed);
+  }
+  function defend2(f, rolled, done, d, speed) {
     defenseFx(f, true);
     const land = (cut) => {
       defenseFx(f, false);
@@ -2851,7 +3114,7 @@ scene("battle", (which, bopts = {}) => {
         miniCue("wait", C_BLUE, () => miniWait({ speed, fakeouts: d.fakeouts || 0, spr: f.spr }, (g) => land(g === "perfect" ? 0.6 : g === "early" ? -0.3 : 0))));
     } else {
       telegraph(`${f.name} ATTACKS!`, () =>
-        miniCue("timing", C_BLUE, () => miniTiming({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: f.mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
+        miniCue("timing", C_BLUE, () => miniTiming({ prefix: "BLOCK!", keys: INTERACT.concat(BACK), speed, zone: d.zone || f.mini.zone || 0.3, zones: d.zones || 1, hot: C_BLUE }, (g) => land(g === "perfect" ? 0.7 : g === "good" ? 0.4 : 0))));
     }
   }
 
@@ -2870,7 +3133,7 @@ scene("battle", (which, bopts = {}) => {
     const lines = [];
     function next(i) {
       if (i >= swings) { say(lines, cb); return; }
-      const a = choose(f.def.attacks);
+      const a = choose((ph && ph.attacks) || f.def.attacks);
       const target = choose(members.filter(alive));
       const rolled = a.d[1] === 0 ? 0 : Math.round(randi(a.d[0], a.d[1]) * dmgScale());
       window.rbBattle.lastRoll = rolled; window.rbBattle.lastTarget = target.name;
@@ -2902,6 +3165,7 @@ scene("battle", (which, bopts = {}) => {
       if (zone === "hollow") go("hollow", { resume: true, lost: true, boss: !lead.small });
       else if (zone === "house2") go("house2", { retry: true });
       else if (zone === "road") go("road", { resume: true, at: bopts.at, lost: true });
+      else if (zone === "summit") go("summit", { retry: true });
       else go("cave", which === "ambush" ? { resume: true, at: "branch" } : { resume: true, lost: true });
     });
   }
@@ -2916,10 +3180,11 @@ scene("battle", (which, bopts = {}) => {
 scene("end", () => {
   resetCam();
   if (!state.beatMalva) { wait(0, () => go((state.party || []).includes("sis") && !state.homeAgain ? "downstairs" : "town")); return; }
+  if (!state.beatYugrin) { wait(0, () => go("summit")); return; }
   trueEnd();
 });
 
-// After Malagore: everyone, the orb in pieces, the end.
+// After Yugrin: everyone at home, the orb in pieces on the table, the end.
 function trueEnd() {
   music.play("finis");
   add([rect(W, H), pos(0, 0), color(11, 11, 20)]);
@@ -2944,11 +3209,11 @@ function trueEnd() {
   add([sprite("dog"), pos(W / 2 - 50, 80), anchor("center"), z(6)]);
   if (state.friends) ["pip", "zed", "bruno", "bloop"].forEach((n, i) => { if (n !== "bloop" || (state.party || []).includes("bloop")) add([sprite(n), pos(W / 2 - 120 + (i < 2 ? i * 24 : 200 + (i - 2) * 24), 70), anchor("center"), z(5)]); });
   add([text("YOU SAVED EVERYONE!", { size: 20 }), pos(W / 2, 104), anchor("center"), color(242, 208, 92), z(5)]);
-  add([text(`${state.name} broke the orb. Nobody is watching anymore.`, { size: 8 }), pos(W / 2, 126), anchor("center"), color(232, 232, 240), z(5)]);
+  add([text(`${state.name} broke the orb on the mountain. Nobody is watching anymore.`, { size: 8 }), pos(W / 2, 126), anchor("center"), color(232, 232, 240), z(5)]);
   add([text(`${state.sis}: "I wasn't scared. Either time."\n${state.bro}: "I was a little scared. Both times."`, { size: 8, align: "center", lineSpacing: 3 }), pos(W / 2, 150), anchor("center"), color(207, 207, 216), z(5)]);
   add([text(`Mom: "All your fingers?"  Dad: "That's my kid."`, { size: 8 }), pos(W / 2, 174), anchor("center"), color(207, 207, 216), z(5)]);
   add([text(`${state.dog} was a very good dog the whole time.`, { size: 8 }), pos(W / 2, 192), anchor("center"), color(138, 138, 153), z(5)]);
-  add([text("~ the end ~", { size: 8 }), pos(W / 2, 208), anchor("center"), color(138, 138, 153), z(5)]);
+  add([text("THE END", { size: 12 }), pos(W / 2, 208), anchor("center"), color(242, 208, 92), z(5)]);
   add([text("press SPACE to play again", { size: 8 }), pos(W / 2, 224), anchor("center"), color(242, 208, 92), z(5)]);
   clearSave();
   INTERACT.forEach((k) => onKeyPress(k, () => { Object.assign(state, START); go("title", { fresh: true }); }));
