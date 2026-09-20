@@ -1137,7 +1137,7 @@ scene("cave", (opts = {}) => {
   for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; add([sprite("post"), pos(ringC.x + Math.cos(a) * 44, ringC.y + Math.sin(a) * 44 - 6), anchor("center"), z(2.3)]); }
   [[ringC.x - 78, "sis"], [ringC.x + 52, "bro"]].forEach(([cx, who]) => {
     add([rect(2, 12), pos(cx + 12, 4), color(140, 140, 150), z(2)]);
-    animalCage(cx, 14, who, null, { big: true, ax: 3, ay: 6 });
+    animalCage(cx, 14, state.beatLygon ? null : who, null, { big: true, ax: 3, ay: 6 }); // rescued kids are not in the cages any more
   });
 
   // ---- the hero
@@ -2238,22 +2238,27 @@ function miniMash(o, done) {
 
 // TIMING: a marker sweeps the track once; press inside the sweet zone. Resolves "perfect" | "good" | "miss".
 function miniTiming(o, done) {
-  const speed = o.speed || 1, n = o.zones || 1, pw = (o.zone || 0.3) * (n > 1 ? 0.75 : 1), gw = pw + 0.18;
-  const dur = 1.4 / speed;
-  const zones = [];
-  for (let i = 0; i < n; i++) zones.push(n === 1 ? rand(0.42, 0.62) : 0.3 + i * 0.4 + rand(-0.05, 0.05));
+  // A bar races in from the right and crosses a fixed line in the middle of the track.
+  // NOW! is when the bar is over the line. `zones` is how many passes the bar makes.
+  const speed = o.speed || 1, passes = o.zones || 1, bw = o.zone || 0.3;
+  const dur = 0.7 / speed;                    // one pass, edge to edge
   miniTrack();
-  zones.forEach((c) => miniZone(c - gw / 2, c + gw / 2, C_GREEN, 27));
-  zones.forEach((c) => miniZone(c - pw / 2, c + pw / 2, o.hot || C_GOLD, 28, "minizone"));
-  const marker = miniMarker();
+  miniZone(0.5 - bw / 2, 0.5 + bw / 2, [44, 92, 60], 27);          // the target band
+  const bar = add([rect(bw * TRACK.w, TRACK.h - 2), pos(0, TRACK.y + 1), anchor("top"), color(...(o.hot || C_GOLD)), z(28), MINI, "minizone"]);
+  add([rect(2, TRACK.h + 8), pos(TRACK.x + TRACK.w / 2, TRACK.y - 4), anchor("top"), color(...C_INK), outline(1, rgb(20, 20, 36)), z(29), MINI, "minimarker"]);
   const pre = o.prefix ? o.prefix + " " : "";
   const prompt = miniPrompt(pre + "WAIT...", W / 2, 163, 14, o.hot || C_GOLD); const btn = miniButton(o.hot || C_GOLD);
-  // the marker sits parked for a beat first, so a press carried over from the menu is not the tap
+  // the bar waits off-screen for a beat first, so a press carried over from the menu is not the tap
   const ARM = 0.3;
   let t = -ARM, over = false;
-  marker.onUpdate(() => {
-    t += dt(); marker.pos.x = TRACK.x + Math.min(1, Math.max(0, t / dur)) * TRACK.w - 1;
-    const f = t / dur, inZone = t >= 0 && zones.some((c) => Math.abs(f - c) <= gw / 2);
+  const span = 1 + bw;
+  // bar centre as a fraction of the track: starts just past the right edge, leaves past the left
+  const centre = () => { const k = Math.max(0, t) / dur; return 1 + bw / 2 - (k - Math.floor(k)) * span; };
+  const dist = () => Math.abs(centre() - 0.5);
+  bar.onUpdate(() => {
+    t += dt();
+    bar.pos.x = TRACK.x + centre() * TRACK.w;
+    const inZone = t >= 0 && dist() <= bw / 2;
     prompt.text = pre + (inZone ? "NOW!" : "WAIT..."); prompt.textSize = inZone ? 18 : 14;
     btn.forEach((b) => b.hidden = !inZone); // WAIT shows no button; it appears only at NOW!
   });
@@ -2263,19 +2268,19 @@ function miniTiming(o, done) {
     miniResult(gradeLabel(res));
     wait(0.45, () => done(res));
   }
-  // Forgiving: a press outside the zone shows an X and the sweep keeps going; two are
+  // Forgiving: a press with the bar off the line shows an X and the bar keeps going; two are
   // tolerated (a kid mashing A gets two chances to land it), the third ends it as a miss.
   let misses = 0;
   const off = miniKeys(o.keys || INTERACT, () => {
     if (t < 0 || over) return;
-    const f = t / dur, d = Math.min(...zones.map((c) => Math.abs(f - c)));
-    if (d <= pw / 2) { music.sfx("select"); finish("perfect"); return; }
-    if (d <= gw / 2) { music.sfx("select"); finish("good"); return; }
+    const d = dist();
+    if (d <= bw / 4) { music.sfx("select"); finish("perfect"); return; }
+    if (d <= bw / 2) { music.sfx("select"); finish("good"); return; }
     misses += 1; music.sfx("back");
-    add([text("X", { size: 14 }), pos(marker.pos.x + 2, TRACK.y - 12), anchor("center"), color(...C_RED), z(31), opacity(1), lifespan(0.6, { fade: 0.3 }), move(UP, 20), MINI]);
+    add([text("X", { size: 14 }), pos(bar.pos.x, TRACK.y - 12), anchor("center"), color(...C_RED), z(31), opacity(1), lifespan(0.6, { fade: 0.3 }), move(UP, 20), MINI]);
     if (misses >= 3) finish("miss");
   });
-  const timer = wait(ARM + dur + 0.12, () => finish("miss"));
+  const timer = wait(ARM + dur * passes + 0.12, () => finish("miss"));
 }
 
 // SEQUENCE: three sweeps one after another, alternating direction; a press inside the zone adds a star.
