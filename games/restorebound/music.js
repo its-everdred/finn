@@ -12,6 +12,8 @@
 //
 // API: music.play(name), stop(), toggleMute(), unlock(), debug(), sfx(kind),
 //      duck(seconds). Unknown track names and sfx kinds are ignored.
+// Tracks: title, night, danger, outside, cave, battle, boss, victory, finis,
+//         summit, final, shatter.
 
 window.music = (() => {
   let ctx = null, master = null, muted = false, current = null, timer = null;
@@ -519,6 +521,224 @@ window.music = (() => {
              "G5B5D6 - - - - - - - - - - - - - - -",
              "C5E5G5C6 - - - - - - - . . . . . . . ."),
     },
+    // The summit: the calm before the last fight. E minor, slow, a high sine
+    // whistling over a low pad, wind in the noise lane, one deep hit a bar or
+    // two, and a chromatic slip at the end of the loop so it never settles.
+    summit: {
+      bpm: 76, swing: 0, vol: 0.85, leadType: "sine", leadVol: 0.85, bassKind: "soft", bassVol: 1.3, chordKind: "pad", chordVol: 1.25, sweepVol: 0.07,
+      kick: B("X . . . . . . . . . . . . . . .",
+              R,
+              R,
+              ". . . . . . . . . . . . X . . .",
+              "X . . . . . . . . . . . . . . .",
+              R,
+              R,
+              ". . . . . . . . X . . . . . . ."),
+      hat: ". . . . . . . . s . . . . . . .",
+      bass: B("E1 - - - - - - - - - - - - - - -",
+              "E1 - - - - - - - - - - - - - - -",
+              "C2 - - - - - - - - - - - - - - -",
+              "B1 - - - - - - - - - - - - - - -",
+              "E1 - - - - - - - - - - - - - - -",
+              "G1 - - - - - - - - - - - - - - -",
+              "A1 - - - - - - - - - - - - - - -",
+              "B1 - - - - - - - Bb1 - - - - - - -"),
+      chord: B("E2B2E3G3 - - - - - - - - - - - - - - -",
+               "E2B2E3G3 - - - - - - - - - - - - - - -",
+               "C3E3G3B3 - - - - - - - - - - - - - - -",
+               "B2D#3F#3A3 - - - - - - - - - - - - - - -",
+               "E2B2E3G3 - - - - - - - - - - - - - - -",
+               "G2D3F#3B3 - - - - - - - - - - - - - - -",
+               "A2C3E3G3 - - - - - - - - - - - - - - -",
+               "B2D#3F#3 - - - - - - - Bb2D3F3 - - - - - - -"),
+      lead: B(". . . . . . . . B5 - - - - - . .",
+              ". . . . G5 - - . F#5 - - - - - - .",
+              ". . . . . . . . . . . . E5 - - -",
+              "- - - - . . . . D#5 - - - - - - .",
+              ". . . . . . . . B5 - - . E6 - - -",
+              "- - - - - - - . D6 - - . B5 - - .",
+              ". . . . A5 - - - - - - . G5 - - .",
+              "F#5 - - - - - - - F5 - - - - - - -"),
+      sweep: B("u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . .",
+               "u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . .",
+               "u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . .",
+               "u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . ."),
+    },
+    // The final boss: the fastest, loudest track in the game. Sixteen bars in
+    // E minor with a flat two and a flat five. Bars 1-8: a menacing bass riff
+    // asks, a sawtooth lead answers, half-time drop at bar 8. Bars 9-16: the
+    // same argument escalated: 16th hats, a running arpeggio, a square
+    // harmony under the lead, drops at 12 and 16, then back to the top.
+    final: {
+      bpm: 164, swing: 0, leadType: "sawtooth", leadVol: 0.85, lead2Type: "square", lead2Vol: 0.5, bassVol: 1.1, chordKind: "stab", chordVol: 1.2, arpVol: 0.6, sweepVol: 0.22,
+      kick: B("x . . . x . . . x . . . x . . .",
+              "x . . . x . . . x . . . x . . .",
+              "x . . . x . . . x . . . x . . .",
+              "x . . . x . . x . . x . x . . .",
+              "x . . . x . . . x . . . x . . .",
+              "x . . . x . . . x . . . x . . .",
+              "x . . . x . . . x . . . x . x x",
+              "X . . . . . . . . . X . . . . .",
+              "x . . . x . . x . . x . x . . .",
+              "x . . . x . . x . . x . x . . .",
+              "x . . . x . . x . . x . x . . .",
+              "X . . . . . . . . . X . . . . .",
+              "x . . . x . . x . . x . x . . .",
+              "x . . . x . . x . . x . x . . .",
+              "x . . . x . . . x . . . x . x x",
+              "X . . . . . . . . . X . . . . ."),
+      snare: B(". . . . x . . . . . . . x . . .",
+               ". . . . x . . . . . . . x . . .",
+               ". . . . x . . . . . . . x . . .",
+               ". . . . x . . . . . . . x . . .",
+               ". . . . x . . . . . . . x . . .",
+               ". . . . x . . . . . . . x . . .",
+               ". . . . x . . . . . . . x . x x",
+               ". . . . . . . . x . . . . . . .",
+               ". . . . x . . x . . . . x . . x",
+               ". . . . x . . x . . . . x . . x",
+               ". . . . x . . x . . . . x . . x",
+               ". . . . . . . . x . . . . . . .",
+               ". . . . x . . x . . . . x . . x",
+               ". . . . x . . x . . . . x . . x",
+               ". . . . x . . . . . . . x . x x",
+               ". . . . . . . . x . . . . . . ."),
+      hat: B("x . x . x . x . x . x . x . o .",
+             "x . x . x . x . x . x . x . o .",
+             "x . x . x . x . x . x . x . o .",
+             "x . x . x . x . x . x . x . o .",
+             "x . x . x . x . x . x . x . o .",
+             "x . x . x . x . x . x . x . o .",
+             "x . x . x . x . x x x x x x x x",
+             "x . . . . . . . x . . . . . . o",
+             "x x x x x x x x x x x x x x o x",
+             "x x x x x x x x x x x x x x o x",
+             "x x x x x x x x x x x x x x o x",
+             "x . . . . . . . x . . . . . . o",
+             "x x x x x x x x x x x x x x o x",
+             "x x x x x x x x x x x x x x o x",
+             "x x x x x x x x x x x x x x x x",
+             "x . . . . . . . x . . . . . . o"),
+      bass: B("E2 . E2 . E2 . . E2 . . E2 . G2 . F2 .",
+              "E2 . E2 . E2 . . E2 . . Bb2 . A2 . G2 .",
+              "E2 . . . E2 . . . E2 . . . E2 . . .",
+              "C2 . . . C2 . . . D2 . . . B1 . . .",
+              "E2 . E2 . E2 . . E2 . . E2 . G2 . F2 .",
+              "E2 . E2 . E2 . . E2 . . Bb2 . B2 . C3 .",
+              "C2 . . . C2 . . . D2 . . . D2 . . .",
+              "B1 - - - - - - - Bb1 - - - - - - -",
+              "E2 . E2 E2 E2 . . E2 . E2 E2 . G2 . F2 F2",
+              "E2 . E2 E2 E2 . . E2 . E2 Bb2 . A2 . G2 G2",
+              "E2 . . . E3 . . . E2 . . . E3 . . .",
+              "C2 - - - - - - - D2 - - - - - - -",
+              "E2 . E2 E2 E2 . . E2 . E2 E2 . G2 . F2 F2",
+              "F2 . F2 F2 F2 . . F2 . F2 F2 . G2 . Ab2 .",
+              "A2 . . . A2 . . . B2 . . . B2 . . .",
+              "B1 - - - - - - - Bb1 - - - - . . ."),
+      lead: B(R,
+              R,
+              "E5 . . . B4 . . . E5 . F#5 . G5 - - .",
+              "G5 . E5 . C5 - - . D5 . F#5 . B5 - - .",
+              R,
+              ". . . . . . . . . . . . B4 . D5 .",
+              "E5 . G5 . B5 - - . C6 . B5 . A5 . G5 .",
+              "F#5 - - - - - - - F5 - - - - - - -",
+              "E5 . . . B5 . . . E6 - - . D6 . B5 .",
+              "C6 . . . B5 . . . G5 . A5 . Bb5 . B5 .",
+              "E6 . . . B5 . . . E6 . F#6 . G6 - - .",
+              "E6 - - - - - - - D6 - - - - - - -",
+              "E5 . G5 . B5 . E6 . D6 . B5 . G5 . E5 .",
+              "F5 . Ab5 . C6 . F6 . Eb6 . C6 . Ab5 . F5 .",
+              "A5 . C6 . E6 - - . D#6 . F#6 . B5 - - .",
+              "B5 - - - - - - - Bb5 - - - - - - ."),
+      lead2: B(R, R, R, R, R, R, R, R,
+               "B4 . . . G5 . . . B5 - - . B5 . G5 .",
+               "G5 . . . G5 . . . E5 . F5 . F5 . F#5 .",
+               "B5 . . . G5 . . . B5 . D6 . E6 - - .",
+               "C6 - - - - - - - B5 - - - - - - -",
+               "B4 . E5 . G5 . B5 . B5 . G5 . E5 . B4 .",
+               "C5 . F5 . Ab5 . C6 . C6 . Ab5 . F5 . C5 .",
+               "E5 . A5 . C6 - - . B5 . D#6 . F#5 - - .",
+               "F#5 - - - - - - - F5 - - - - - - ."),
+      chord: B(". . . . . . . . . . . . E4G4B4 . . .",
+               ". . . . . . . . . . . . E4G4Bb4 . . .",
+               "E4G4B4 . . . . . . . E4G4B4 . . . . . . .",
+               "C4E4G4 . . . . . . . D4F#4A4 . . . B3D#4F#4 . . .",
+               ". . . . . . . . . . . . E4G4B4 . . .",
+               ". . . . . . . . . . . . E4G4Bb4 . . .",
+               "C4E4G4 . . . . . . . D4F#4A4 . . . . . . .",
+               "B3D#4F#4 . . . . . . . Bb3D4F4 . . . . . . .",
+               "E4G4B4 . . . E4G4B4 . . . E4G4B4 . . . E4G4Bb4 . . .",
+               "E4G4B4 . . . E4G4B4 . . . E4G4B4 . . . E4G4Bb4 . . .",
+               "E4G4B4 . . . . . . . E4G4B4 . . . . . . .",
+               "C4E4G4 . . . . . . . D4F#4A4 . . . . . . .",
+               "E4G4B4 . . . E4G4B4 . . . E4G4B4 . . . E4G4Bb4 . . .",
+               "F4Ab4C5 . . . F4Ab4C5 . . . F4Ab4C5 . . . G4B4D5 . . .",
+               "A4C5E5 . . . . . . . B4D#5F#5 . . . . . . .",
+               "B3D#4F#4 . . . . . . . Bb3D4F4 . . . . . . ."),
+      arp: B(R, R, R, R, R, R, R, R,
+             "E5G5B5 - - - - - - - - - - - - - - -",
+             "E5G5Bb5 - - - - - - - - - - - - - - -",
+             "E5G5B5 - - - - - - - - - - - - - - -",
+             "C5E5G5 - - - - - - - D5F#5A5 - - - - - - -",
+             "E5G5B5 - - - - - - - - - - - - - - -",
+             "F5Ab5C6 - - - - - - - - - - - G5B5D6 - - -",
+             "A5C6E6 - - - - - - - B5D#6F#6 - - - - - - -",
+             "B5D#6F#6 - - - - - - - . . . . . . . ."),
+      sweep: B(R, R, R, R, R, R,
+               "u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . .",
+               R, R,
+               "u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . .",
+               R, R,
+               "u . . . . . . . . . . . . . . .",
+               "d . . . . . . . . . . . . . . ."),
+    },
+    // The orb breaks: a one-shot cue of about four seconds. One bar of
+    // diminished tension (riser, rising arpeggio, snare roll) resolves on the
+    // downbeat of bar two to a bright C major, which rings into bar three;
+    // bars three and four are a soft Cmaj7 / Fmaj7 pad that loops.
+    shatter: {
+      bpm: 120, swing: 0, loopStart: 32, leadType: "square", leadVol: 0.9, lead2Type: "triangle", lead2Vol: 0.7, bassKind: "soft", bassVol: 1.2, chordKind: "pad", chordVol: 1.3, arpVol: 0.9, sweepVol: 0.15,
+      kick: B("X . . . . . . . . . . . . . . .",
+              "X . . . . . . . . . . . . . . .",
+              R, R),
+      snare: B(". . . . . . . . s . s . x . x x",
+               "x . . . . . . . . . . . . . . .",
+               R, R),
+      hat: B(". . . . . . . . x . x . x x x x",
+             "o . . . . . . . . . . . . . . .",
+             R, R),
+      bass: B("B1 - - - - - - - - - - - - - - -",
+              "C2 - - - - - - - - - - - - - - -",
+              "C2 - - - - - - - - - - - - - - -",
+              "F1 - - - - - - - - - - - - - - -"),
+      chord: B("B2D3F3Ab3 - - - - - - - - - - - - - - -",
+               "C3E3G3C4 - - - - - - - - - - - - - - -",
+               "C3E3G3B3 - - - - - - - - - - - - - - -",
+               "F2A2C3E3 - - - - - - - - - - - - - - -"),
+      lead: B(R,
+              "C6 - - - - - - - - - - - - - - -",
+              "- - - - - - - - . . . . . . . .",
+              R),
+      lead2: B(R,
+               "E5 - - - - - - - - - - - - - - -",
+               "- - - - - - - - . . . . . . . .",
+               R),
+      arp: B("B4D5F5Ab5 - - - - - - - - - - - - - - -",
+             "C5E5G5C6 - - - - - - - - - - - - - - -",
+             "C5E5G5C6 - - - - - - - . . . . . . . .",
+             R),
+      sweep: B("u . . . . . . . . . . . . . . .",
+               R,
+               "d . . . . . . . . . . . . . . .",
+               R),
+    },
   };
   // older scene code asked for "home"; keep it pointing at the theme
   const ALIAS = { home: "title" };
@@ -667,6 +887,42 @@ window.music = (() => {
       kick(t, 1.3); sweep(t, 0.9, 2000, 120, 0.6, "lowpass", 1, 0.02);
       [0, 1, 6].forEach((d) => tone(t, "sawtooth", 600 * Math.pow(2, d / 12), 80 * Math.pow(2, d / 12), 0.9, 0.22, 0.01)); api.duck(1.2);
     },
+    // a big whoosh and a metallic ring left hanging behind it
+    sword_arc(t) {
+      sweep(t, 0.32, 350, 5500, 0.6, "bandpass", 1.5, 0.12); tone(t + 0.22, "sawtooth", 1400, 500, 0.15, 0.15);
+      [2400, 3620, 5100].forEach((f, i) => tone(t + 0.26, "sine", f, f * 0.98, 0.9 - i * 0.15, 0.16 - i * 0.04, 0.004));
+    },
+    // a rising laser sweep: two detuned glides under a climbing noise band
+    orb_beam(t) {
+      tone(t, "sawtooth", 180, 1900, 0.75, 0.22, 0.04); tone(t, "pulse12", 270, 2850, 0.75, 0.14, 0.04);
+      sweep(t, 0.8, 400, 7000, 0.35, "highpass", 1, 0.5); tone(t + 0.6, "sine", 1900, 2400, 0.5, 0.15, 0.01);
+    },
+    // a sharp splintering hit
+    crack(t) { snare(t, 1.2); sweep(t, 0.09, 7000, 1500, 0.7, "highpass", 1, 0.002); tone(t, "square", 2200, 240, 0.07, 0.3, 0.001); kick(t + 0.01, 0.6); },
+    // a white-noise crack and then the boom rolling in under it
+    lightning(t) {
+      sweep(t, 0.14, 9000, 2500, 0.9, "highpass", 0.8, 0.002); sweep(t + 0.03, 0.5, 4000, 300, 0.5, "lowpass", 0.7, 0.01);
+      tone(t + 0.05, "sawtooth", 3000, 90, 0.18, 0.25, 0.002); kick(t + 0.09, 1.4); tone(t + 0.09, "sine", 75, 26, 1.2, 0.85, 0.01);
+    },
+    // glass burst: a spray of short random high sines, then a shimmering major stack
+    shatter(t) {
+      sweep(t, 0.28, 9000, 3500, 0.6, "highpass", 1, 0.002);
+      for (let i = 0; i < 10; i++) { const f = 1800 + Math.random() * 4800; tone(t + i * 0.028, "sine", f, f * 0.93, 0.11 + Math.random() * 0.1, 0.16, 0.002); }
+      chord(t + 0.2, [96, 100, 103, 108], 0.9, 1.4); sweep(t + 0.25, 0.7, 5000, 10000, 0.14, "highpass", 1, 0.08);
+    },
+    // like heal, but two octaves of sparkle over a wider, longer pad
+    heal_all(t) {
+      [60, 64, 67, 72, 76, 79, 84, 88].forEach((n, i) => lead(t + i * 0.075, n, 0.42, 0.55, "triangle"));
+      chord(t + 0.25, [60, 64, 67, 72, 76], 1.1, 1.6, "pad"); sweep(t + 0.2, 0.9, 2500, 9000, 0.12, "highpass", 1, 0.3);
+    },
+    // a fall, a wobble at the bottom, then a climb back out
+    transform(t) {
+      tone(t, "sawtooth", 700, 160, 0.42, 0.28, 0.01); tone(t, "square", 705, 163, 0.42, 0.14, 0.01);
+      bass(t + 0.4, 38, 0.55, 0.9, "wobble", 0.045);
+      tone(t + 0.55, "sawtooth", 160, 1100, 0.7, 0.24, 0.05); tone(t + 0.55, "square", 162, 1112, 0.7, 0.12, 0.05);
+    },
+    // a heavy low thud for Yugrin's entrance
+    stomp(t) { kick(t, 1.5); kick(t + 0.05, 1.0); tone(t, "sine", 95, 30, 0.7, 0.9, 0.005); sweep(t, 0.45, 500, 50, 0.6, "lowpass", 0.7, 0.005); snare(t + 0.01, 0.5); },
   };
 
   const api = {
