@@ -193,7 +193,8 @@ window.music = (() => {
   }
   function unlock() {
     if (!ensure()) return;
-    if (ctx.state === "suspended") ctx.resume();
+    // iOS reports "interrupted" as well as "suspended"; anything not running gets a resume
+    if (ctx.state !== "running") { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); }
     if (!keeper) {
       // iOS keeps Web Audio under the ringer switch until a media element is *playing*;
       // a looping silent clip, kept referenced, moves the session to playback and holds it there.
@@ -209,7 +210,7 @@ window.music = (() => {
     if (armed) return; armed = true;
     // capture phase, so a canvas that stops propagation cannot hide the gesture from us
     ["keydown", "pointerdown", "pointerup", "touchstart", "touchend", "click"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true, capture: true }));
-    document.addEventListener("visibilitychange", () => { if (!document.hidden && ctx && ctx.state === "suspended") ctx.resume(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && ctx && ctx.state !== "running") ctx.resume(); });
   }
   arm();
 

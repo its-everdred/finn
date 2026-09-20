@@ -11,6 +11,10 @@
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 100dvh; touch-action: none; -webkit-user-select: none; user-select: none; }
   /* the game: as wide as the screen allows, but never taller than what is left after the controls */
   #stage { position: relative; width: min(100vw, calc((100dvh - var(--controls-h) - 56px) * 4 / 3), 1280px); aspect-ratio: 4 / 3; flex: none; }
+  #startgate { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(11,11,20,.82); border: 0; color: #f2d05c; font-family: monospace; cursor: pointer; }
+  #startgate .big { font-size: clamp(22px, 5vw, 40px); letter-spacing: 2px; }
+  #startgate .small { font-size: 14px; color: #cfcfd8; }
+  #startgate[hidden] { display: none; }
   canvas#game { position: absolute; inset: 0; width: 100% !important; height: 100% !important; image-rendering: pixelated; image-rendering: crisp-edges; outline: none; }
   /* the name field: a real text input so phones and tablets bring up a keyboard */
   #namewrap { display: none; width: min(100vw, 960px); padding: 0 12px; box-sizing: border-box; }
@@ -33,7 +37,13 @@
 </style>
 </head>
 <body>
-  <div id="stage"><canvas id="game" tabindex="0"></canvas></div>
+  <div id="stage">
+    <canvas id="game" tabindex="0"></canvas>
+    <button id="startgate" aria-label="tap to play">
+      <span class="big">&#9654; TAP TO PLAY</span>
+      <span class="small">turns the sound on</span>
+    </button>
+  </div>
   <div id="namewrap">
     <input id="namebox" type="text" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="type a name">
     <button id="nameok">OK</button>
@@ -61,6 +71,11 @@
   <script src="sprites.js"></script>
   <script>
     const canvas = document.getElementById("game");
+    // The start gate is a real button: its click is the user gesture that unlocks audio on iOS.
+    const gate = document.getElementById("startgate");
+    const openGate = (e) => { if (e) e.preventDefault(); window.music.unlock(); gate.hidden = true; canvas.focus(); };
+    gate.addEventListener("click", openGate);
+    gate.addEventListener("touchend", openGate, { passive: false });
     document.getElementById("restart").addEventListener("click", () => {
       if (confirm("Erase your saved game and start over?")) { window.restoreboundRestart(); canvas.focus(); }
     });
